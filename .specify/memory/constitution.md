@@ -1,50 +1,162 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+SYNC IMPACT REPORT
+==================
+Version Change: None → 1.0.0
+Constitution Type: MAJOR - Initial establishment of project governance
+
+Modified Principles: N/A (initial creation)
+
+Added Sections:
+- Core Principles (5 principles covering code quality, testing, UX, performance, maintainability)
+- Quality Standards (technical quality metrics and requirements)
+- Development Workflow (process and review requirements)
+- Governance (amendment procedures and compliance)
+
+Removed Sections: N/A (initial creation)
+
+Templates Requiring Updates:
+✅ .specify/templates/plan-template.md - Constitution Check section aligns with principles
+✅ .specify/templates/spec-template.md - Requirements sections support principle validation
+✅ .specify/templates/tasks-template.md - Task categories reflect principle-driven development
+✅ .specify/templates/agent-file-template.md - No updates required (generic template)
+✅ .specify/templates/checklist-template.md - No verification needed (not examined yet)
+
+Follow-up TODOs:
+- Monitor adherence to 95% test success rate metric
+- Establish baseline performance metrics for TypeScript compilation and plugin load time
+- Document specific accessibility testing procedures for Logseq plugin environment
+-->
+
+# Logseq Reflect Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Code Quality First
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+All code MUST meet production-grade quality standards before merging:
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+- **Type Safety**: TypeScript strict mode enabled; no `any` types without explicit justification
+- **Error Handling**: All async operations MUST have try-catch blocks; all user-facing errors MUST provide actionable feedback
+- **Code Review**: All changes MUST be reviewed by at least one other developer before merge
+- **Documentation**: Public APIs MUST have JSDoc comments; complex logic MUST include inline explanations
+- **Linting**: All code MUST pass ESLint and Prettier checks without warnings
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+**Rationale**: High code quality reduces bugs, improves maintainability, and ensures long-term project sustainability. Users depend on plugin stability within their note-taking workflow.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### II. Test-Driven Development (NON-NEGOTIABLE)
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+Testing MUST follow a disciplined, incremental approach:
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- **Test-First for Critical Paths**: For user-facing features (commands, LLM integration, block operations), write tests BEFORE implementation
+- **Test Categories**: MUST include unit tests for business logic, integration tests for Logseq API interactions, and contract tests for LLM client interfaces
+- **Coverage Requirements**: Minimum 80% code coverage for services and utilities; 100% coverage for critical paths (data transformations, API calls)
+- **Test Quality**: Tests MUST be deterministic, isolated, and fast (unit tests <100ms, integration tests <1s)
+- **Failure Protocol**: If tests fail, implementation MUST stop; fix tests or code before proceeding
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+**Rationale**: Logseq plugins interact with user data and external AI services. Test-first development catches integration issues early and prevents data loss or corruption. The 95% success rate target from the PRD requires robust testing.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### III. User Experience Consistency
+
+All user interactions MUST provide predictable, accessible, and delightful experiences:
+
+- **Feedback Loops**: Every async operation MUST show progress (spinner, placeholder text, streaming updates)
+- **Error Recovery**: Failed operations MUST display clear error messages with suggested fixes; MUST never leave UI in broken state
+- **Accessibility**: All UI components MUST support keyboard navigation; color choices MUST meet WCAG AA contrast ratios; screen reader labels MUST be provided
+- **Theme Compatibility**: UI MUST adapt to Logseq light/dark themes automatically
+- **Consistency**: Command names, icons, and behaviors MUST follow Logseq conventions; similar operations MUST have similar UX patterns
+
+**Rationale**: Users integrate this plugin into their daily knowledge workflow. Inconsistent or confusing UX breaks flow state and reduces adoption. Accessibility ensures inclusivity.
+
+### IV. Performance Requirements
+
+The plugin MUST maintain responsiveness under typical and edge-case loads:
+
+- **Plugin Load Time**: Initial load MUST complete in <2 seconds on modern hardware
+- **Command Response**: UI feedback MUST appear within 100ms of user action (even if backend processing continues)
+- **Streaming Efficiency**: LLM streaming responses MUST render incrementally without blocking the main thread
+- **Memory Management**: Plugin MUST not exceed 100MB memory footprint under normal operation; MUST clean up resources on unload
+- **Context Handling**: Large page/block contexts (>10k tokens) MUST be truncated or summarized intelligently without user-visible delays
+
+**Rationale**: Performance directly impacts user productivity. Slow plugins disrupt note-taking flow. The PRD emphasizes "5-minute setup" and smooth UX, requiring fast, predictable performance.
+
+### V. Maintainability & Extensibility
+
+Code architecture MUST support long-term evolution and community contribution:
+
+- **Modularity**: Clear separation between LLM client, command handlers, UI components, and Logseq API wrappers
+- **Extensibility Points**: Custom commands, model configurations, and prompt templates MUST be user-configurable without code changes
+- **Dependency Management**: External dependencies MUST be minimized; MUST document upgrade paths and breaking changes
+- **Logging & Debugging**: All critical operations MUST log to console with structured, searchable messages; MUST include debug mode for troubleshooting
+- **Code Simplicity**: Favor explicit over clever; avoid premature abstraction; YAGNI principles apply
+
+**Rationale**: The PRD emphasizes customization (custom prompts, model switching, block attributes). Maintainable architecture enables community contributions and feature iteration without technical debt.
+
+## Quality Standards
+
+### Technical Metrics
+
+Projects MUST meet these measurable quality gates:
+
+- **Build Success**: TypeScript compilation MUST complete without errors; warnings MUST be addressed before merge
+- **Test Success Rate**: ≥95% of automated tests MUST pass on every commit
+- **Bundle Size**: Plugin bundle MUST remain <500KB (minified, gzipped) to ensure fast loading
+- **Runtime Errors**: Production error rate MUST be <1% of plugin loads (tracked via opt-in telemetry)
+- **API Compatibility**: MUST support minimum Logseq version specified in manifest; MUST document breaking changes
+
+### Code Review Standards
+
+Pull requests MUST satisfy these criteria:
+
+1. **Functional Requirements**: Implements exactly what spec/PRD describes; no scope creep
+2. **Test Coverage**: Includes tests for new code paths; updates existing tests for changes
+3. **Documentation**: Updates README, JSDoc, and inline comments where needed
+4. **Performance**: No regressions in load time, memory usage, or responsiveness (benchmark if uncertain)
+5. **Security**: No exposure of API keys, user data, or injection vulnerabilities (XSS, command injection)
+
+## Development Workflow
+
+### Feature Development Process
+
+1. **Specification**: All features MUST have a spec (`.specify/specs/###-feature/spec.md`) defining user stories, acceptance criteria, and success metrics
+2. **Planning**: Implementation plan MUST identify technical approach, affected files, and constitution compliance checks
+3. **Test Design**: Write contract and integration tests FIRST; verify they fail before implementation
+4. **Implementation**: Develop in small commits; run tests frequently; fix failures immediately
+5. **Review & Validation**: Code review + manual testing against acceptance criteria
+6. **Documentation**: Update user-facing docs (README, settings descriptions) and developer docs (architecture notes)
+
+### Continuous Integration
+
+CI pipeline MUST enforce:
+
+- Linting and formatting checks (ESLint, Prettier)
+- TypeScript compilation without errors
+- Full test suite execution (unit, integration, contract tests)
+- Bundle size verification (<500KB threshold)
+- Accessibility checks (automated WCAG validation where applicable)
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+### Amendment Procedure
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+Constitution changes require:
+
+1. **Proposal**: Document proposed change with rationale and impact assessment
+2. **Discussion**: Review with maintainers; assess effects on existing workflows
+3. **Approval**: Consensus among core maintainers (or project owner decision for solo projects)
+4. **Migration**: Update all dependent templates (plan, spec, tasks) for consistency
+5. **Versioning**: Increment constitution version per semantic versioning rules
+
+### Versioning Policy
+
+- **MAJOR**: Breaking changes to principles (e.g., removing test-first requirement, relaxing quality gates)
+- **MINOR**: New principles added or existing principles expanded (e.g., adding security principle)
+- **PATCH**: Clarifications, wording improvements, non-semantic updates
+
+### Compliance Review
+
+- All specs MUST include constitution check section verifying principle adherence
+- All PRs MUST confirm no constitution violations in review checklist
+- Quarterly reviews MUST assess whether principles remain relevant and achievable
+- Violations MUST be justified with "Complexity Tracking" entries in plan.md
+
+**Version**: 1.0.0 | **Ratified**: 2026-01-05 | **Last Amended**: 2026-01-05

@@ -1,0 +1,45 @@
+# Node.js / JavaScript / TypeScript
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Build artifacts
+*.tsbuildinfo
+.cache/
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+.tmp/
+
+# Logseq specific
+.logseq/
+
+# Bundle analysis
+dist/stats.html

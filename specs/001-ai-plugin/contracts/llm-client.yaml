@@ -1,0 +1,373 @@
+openapi: 3.1.0
+info:
+  title: LLM Client Interface
+  description: Contract for LLM client abstraction supporting OpenAI-compatible endpoints
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:11434/v1
+    description: Local Ollama instance (default)
+  - url: https://api.openai.com/v1
+    description: OpenAI production API
+
+paths:
+  /chat/completions:
+    post:
+      summary: Send chat completion request
+      description: Execute single-turn or multi-turn chat completion with optional streaming
+      operationId: createChatCompletion
+      tags:
+        - Chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+            examples:
+              basicQuestion:
+                summary: Basic question without context
+                value:
+                  model: llama3
+                  messages:
+                    - role: system
+                      content: You are a helpful assistant.
+                    - role: user
+                      content: What is Logseq?
+                  temperature: 0.7
+                  stream: false
+
+              contextAwareQuestion:
+                summary: Question with page context
+                value:
+                  model: llama3
+                  messages:
+                    - role: system
+                      content: You are a helpful assistant. Answer questions based on provided context.
+                    - role: user
+                      content: |
+                        Context:
+                        # Project Alpha
+                        - Goal 1: Implement AI integration
+                        - Goal 2: Improve UX
+
+                        Question: What are the project goals?
+                  temperature: 0.7
+                  stream: true
+
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+              examples:
+                nonStreamingResponse:
+                  summary: Non-streaming response
+                  value:
+                    id: chatcmpl-123
+                    object: chat.completion
+                    created: 1704470400
+                    model: llama3
+                    choices:
+                      - index: 0
+                        message:
+                          role: assistant
+                          content: "Logseq is an open-source knowledge management and collaboration platform."
+                        finish_reason: stop
+                    usage:
+                      prompt_tokens: 15
+                      completion_tokens: 18
+                      total_tokens: 33
+
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionStreamResponse'
+              examples:
+                streamingResponse:
+                  summary: Streaming response (SSE format)
+                  value: |
+                    data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1704470400,"model":"llama3","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+                    data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1704470400,"model":"llama3","choices":[{"index":0,"delta":{"content":"Logseq"},"finish_reason":null}]}
+
+                    data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1704470400,"model":"llama3","choices":[{"index":0,"delta":{"content":" is"},"finish_reason":null}]}
+
+                    data: [DONE]
+
+        '400':
+          description: Bad request (invalid parameters)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidTemperature:
+                  summary: Temperature out of range
+                  value:
+                    error:
+                      message: "Invalid temperature value. Must be between 0.0 and 2.0"
+                      type: invalid_request_error
+                      code: invalid_parameter
+
+        '401':
+          description: Unauthorized (invalid API key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    ChatCompletionRequest:
+      type: object
+      required:
+        - model
+        - messages
+      properties:
+        model:
+          type: string
+          description: Model identifier (e.g., "llama3", "gpt-4", "qwen2")
+          example: llama3
+
+        messages:
+          type: array
+          description: Conversation history with roles and content
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+
+        temperature:
+          type: number
+          description: Sampling temperature (0.0-2.0)
+          minimum: 0.0
+          maximum: 2.0
+          default: 0.7
+
+        top_p:
+          type: number
+          description: Nucleus sampling parameter (0.0-1.0)
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.9
+
+        max_tokens:
+          type: integer
+          description: Maximum tokens to generate (null = unlimited)
+          minimum: 1
+          nullable: true
+
+        stream:
+          type: boolean
+          description: Whether to stream response via SSE
+          default: false
+
+        stop:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: Sequences where generation should stop
+          nullable: true
+
+    ChatMessage:
+      type: object
+      required:
+        - role
+        - content
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+          description: Message role in conversation
+
+        content:
+          type: string
+          description: Message content
+
+    ChatCompletionResponse:
+      type: object
+      required:
+        - id
+        - object
+        - created
+        - model
+        - choices
+      properties:
+        id:
+          type: string
+          description: Unique completion ID
+
+        object:
+          type: string
+          enum: [chat.completion]
+          description: Object type
+
+        created:
+          type: integer
+          description: Unix timestamp of creation
+
+        model:
+          type: string
+          description: Model used for completion
+
+        choices:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ChatCompletionChoice'
+
+        usage:
+          $ref: '#/components/schemas/UsageInfo'
+
+    ChatCompletionChoice:
+      type: object
+      required:
+        - index
+        - message
+        - finish_reason
+      properties:
+        index:
+          type: integer
+          description: Choice index
+
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+
+        finish_reason:
+          type: string
+          enum: [stop, length, content_filter, null]
+          description: Reason completion finished
+          nullable: true
+
+    ChatCompletionStreamResponse:
+      type: object
+      description: Streaming chunk in SSE format (data: {...})
+      required:
+        - id
+        - object
+        - created
+        - model
+        - choices
+      properties:
+        id:
+          type: string
+          description: Unique completion ID
+
+        object:
+          type: string
+          enum: [chat.completion.chunk]
+          description: Object type
+
+        created:
+          type: integer
+          description: Unix timestamp of creation
+
+        model:
+          type: string
+          description: Model used for completion
+
+        choices:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ChatCompletionStreamChoice'
+
+    ChatCompletionStreamChoice:
+      type: object
+      required:
+        - index
+        - delta
+      properties:
+        index:
+          type: integer
+          description: Choice index
+
+        delta:
+          type: object
+          description: Incremental content update
+          properties:
+            role:
+              type: string
+              enum: [assistant]
+              description: Role (only in first chunk)
+
+            content:
+              type: string
+              description: Incremental text content
+
+        finish_reason:
+          type: string
+          enum: [stop, length, content_filter, null]
+          description: Reason completion finished (only in final chunk)
+          nullable: true
+
+    UsageInfo:
+      type: object
+      required:
+        - prompt_tokens
+        - completion_tokens
+        - total_tokens
+      properties:
+        prompt_tokens:
+          type: integer
+          description: Tokens in prompt
+
+        completion_tokens:
+          type: integer
+          description: Tokens in completion
+
+        total_tokens:
+          type: integer
+          description: Total tokens used
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - message
+            - type
+          properties:
+            message:
+              type: string
+              description: Human-readable error message
+
+            type:
+              type: string
+              description: Error type category
+              example: invalid_request_error
+
+            code:
+              type: string
+              description: Specific error code
+              example: invalid_parameter
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: API key for OpenAI-compatible endpoints (optional for local models)
+
+security:
+  - BearerAuth: []
+  - {}  # Allow unauthenticated for local endpoints
