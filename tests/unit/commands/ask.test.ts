@@ -148,6 +148,8 @@ describe('Ask AI Command Handler - Unit Tests', () => {
             }),
           ]),
         })
+,
+        expect.any(Object) // AbortSignal
       )
     })
 
@@ -175,6 +177,8 @@ describe('Ask AI Command Handler - Unit Tests', () => {
             }),
           ]),
         })
+,
+        expect.any(Object) // AbortSignal
       )
     })
 
@@ -201,6 +205,8 @@ describe('Ask AI Command Handler - Unit Tests', () => {
           top_p: 0.9,
           max_tokens: 1000,
         })
+,
+        expect.any(Object) // AbortSignal
       )
     })
 
@@ -220,6 +226,8 @@ describe('Ask AI Command Handler - Unit Tests', () => {
         expect.objectContaining({
           max_tokens: undefined,
         })
+,
+        expect.any(Object) // AbortSignal
       )
     })
   })
@@ -512,6 +520,8 @@ describe('Ask AI Command Handler - Unit Tests', () => {
         expect.objectContaining({
           stream: true,
         })
+,
+        expect.any(Object) // AbortSignal
       )
     })
   })

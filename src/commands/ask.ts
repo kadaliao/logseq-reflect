@@ -39,8 +39,8 @@ export async function executeAskCommand(
     const currentBlock = await logseq.Editor.getCurrentBlock()
     const parentBlockUUID = currentBlock?.uuid
 
-    // Create response handler
-    const handler = await createResponseHandler(parentBlockUUID)
+    // Create response handler (T070: with abort controller)
+    const { handler, abortController } = await createResponseHandler(parentBlockUUID)
 
     // Create LLM client
     const client = new LLMClient(settings.llm)
@@ -52,7 +52,7 @@ export async function executeAskCommand(
         {
           role: 'system' as const,
           content:
-            'You are a helpful AI assistant integrated into Logseq. Provide clear, concise, and accurate answers.',
+            'You are a helpful AI assistant integrated into Logseq. Respond to user requests accurately and helpfully. Handle various types of requests including questions, instructions, summaries, translations, or any other tasks.',
         },
         {
           role: 'user' as const,
@@ -70,7 +70,8 @@ export async function executeAskCommand(
       logger.debug('Starting streaming request')
 
       try {
-        for await (const chunk of client.stream(request)) {
+        // T070: Pass cancel signal to stream for cancellation support
+        for await (const chunk of client.stream(request, abortController.signal)) {
           await updateWithChunk(handler, chunk)
         }
 
@@ -118,7 +119,7 @@ async function promptForQuestion(): Promise<string | null> {
 
   if (!currentBlock || !currentBlock.content) {
     logseq.App.showMsg(
-      '💡 Please write your question in a block first, then use the command',
+      '💡 Please write your instruction or question in a block first, then use the command',
       'warning'
     )
     return null

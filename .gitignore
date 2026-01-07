@@ -43,3 +43,6 @@ coverage/
 
 # Bundle analysis
 dist/stats.html
+
+# Project documentation (user-specific)
+CLAUDE.md

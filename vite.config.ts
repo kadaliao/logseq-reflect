@@ -14,7 +14,7 @@ export default defineConfig({
   ],
   build: {
     target: 'esnext',
-    minify: false,
+    minify: 'terser', // Enable minification for production
     sourcemap: true,
     outDir: 'dist',
     emptyOutDir: true,
@@ -25,8 +25,12 @@ export default defineConfig({
         entryFileNames: 'index.js',
         format: 'iife',
         name: 'LogseqAIPlugin',
+        // Note: Manual chunks not compatible with IIFE format
+        // Code splitting would require ES module format
       },
     },
+    // T121: Bundle size limits (500KB gzipped)
+    chunkSizeWarningLimit: 500,
   },
   resolve: {
     alias: {

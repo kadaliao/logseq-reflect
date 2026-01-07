@@ -9,12 +9,77 @@ import { createLogger } from '../utils/logger'
 const logger = createLogger('ResponseHandler')
 
 /**
+ * T069: Batching configuration for streaming updates
+ * Update block at most once every 50ms to avoid excessive DOM updates
+ */
+const BATCH_UPDATE_INTERVAL_MS = 50
+
+// Track pending updates for batching
+const pendingUpdates = new Map<string, NodeJS.Timeout>()
+
+// T125: Track active handlers for cancellation on navigation
+const activeHandlers = new Map<string, AbortController>()
+
+/**
+ * T125: Register navigation handler to cancel in-flight requests
+ * Should be called during plugin initialization
+ */
+export function registerNavigationHandler(): void {
+  // Listen for route changes to cancel in-flight requests
+  logseq.App.onRouteChanged(() => {
+    logger.debug('Route changed, cancelling in-flight requests', {
+      activeCount: activeHandlers.size,
+    })
+
+    // Cancel all active handlers
+    for (const [requestID, abortController] of activeHandlers.entries()) {
+      abortController.abort()
+      activeHandlers.delete(requestID)
+      logger.debug('Cancelled request due to navigation', { requestID })
+    }
+
+    // Clear all pending updates
+    for (const [blockUUID, timeout] of pendingUpdates.entries()) {
+      clearTimeout(timeout)
+      pendingUpdates.delete(blockUUID)
+    }
+  })
+
+  logger.info('Navigation handler registered for request cancellation')
+}
+
+/**
+ * T125: Cleanup all active handlers (called on plugin unload)
+ */
+export function cleanupAllHandlers(): void {
+  logger.debug('Cleaning up all handlers', {
+    activeCount: activeHandlers.size,
+    pendingCount: pendingUpdates.size,
+  })
+
+  // Cancel all active requests
+  for (const [requestID, abortController] of activeHandlers.entries()) {
+    abortController.abort()
+    activeHandlers.delete(requestID)
+  }
+
+  // Clear all pending updates
+  for (const [blockUUID, timeout] of pendingUpdates.entries()) {
+    clearTimeout(timeout)
+    pendingUpdates.delete(blockUUID)
+  }
+
+  logger.info('All handlers cleaned up')
+}
+
+/**
  * Create a response handler for streaming AI responses
  * Manages placeholder block creation and streaming updates
+ * T070: Returns AbortController for request cancellation
  */
 export async function createResponseHandler(
   parentBlockUUID?: string
-): Promise<ResponseHandler> {
+): Promise<{ handler: ResponseHandler; abortController: AbortController }> {
   const requestID = generateRequestID()
 
   logger.debug('Creating response handler', {
@@ -25,6 +90,12 @@ export async function createResponseHandler(
   // Create placeholder block
   const placeholderUUID = await createPlaceholderBlock(parentBlockUUID)
 
+  // T070: Create abort controller for cancellation support
+  const abortController = new AbortController()
+
+  // T125: Track active handler for navigation cancellation
+  activeHandlers.set(requestID, abortController)
+
   const handler: ResponseHandler = {
     requestID,
     placeholderUUID,
@@ -32,14 +103,16 @@ export async function createResponseHandler(
     accumulatedContent: '',
     errorMessage: null,
     startTime: Date.now(),
+    cancelToken: abortController.signal,
   }
 
-  return handler
+  return { handler, abortController }
 }
 
 /**
  * Update handler with streaming chunk
- * Accumulates content and updates the block
+ * Accumulates content and updates the block with batching
+ * T069: Batched updates (50ms intervals) for streaming efficiency
  */
 export async function updateWithChunk(
   handler: ResponseHandler,
@@ -60,10 +133,10 @@ export async function updateWithChunk(
   handler.accumulatedContent += content
   handler.status = 'streaming'
 
-  // Update block with accumulated content
-  await updateBlock(handler.placeholderUUID, handler.accumulatedContent)
+  // T069: Batch updates - schedule update instead of updating immediately
+  scheduleBatchedUpdate(handler)
 
-  logger.debug('Updated block with chunk', {
+  logger.debug('Chunk received and batched', {
     requestID: handler.requestID,
     chunkLength: content.length,
     totalLength: handler.accumulatedContent.length,
@@ -71,11 +144,41 @@ export async function updateWithChunk(
 }
 
 /**
+ * T069: Schedule a batched update
+ * Debounces updates to avoid excessive DOM manipulation
+ */
+function scheduleBatchedUpdate(handler: ResponseHandler): void {
+  const blockUUID = handler.placeholderUUID
+
+  // Clear any pending update for this block
+  const existingTimeout = pendingUpdates.get(blockUUID)
+  if (existingTimeout) {
+    clearTimeout(existingTimeout)
+  }
+
+  // Schedule new update
+  const timeout = setTimeout(async () => {
+    await updateBlock(blockUUID, handler.accumulatedContent)
+    pendingUpdates.delete(blockUUID)
+  }, BATCH_UPDATE_INTERVAL_MS)
+
+  pendingUpdates.set(blockUUID, timeout)
+}
+
+/**
  * Mark handler as completed
+ * T069: Ensure final update is applied immediately (flush batched update)
+ * T125: Remove from active handlers tracking
  */
 export async function markCompleted(handler: ResponseHandler): Promise<void> {
   handler.status = 'completed'
   handler.completionTime = Date.now()
+
+  // T125: Remove from active handlers
+  activeHandlers.delete(handler.requestID)
+
+  // T069: Flush any pending batched update
+  flushBatchedUpdate(handler.placeholderUUID)
 
   // Update block with final content (add checkmark)
   if (handler.accumulatedContent) {
@@ -96,6 +199,8 @@ export async function markCompleted(handler: ResponseHandler): Promise<void> {
 
 /**
  * Mark handler as failed with error message
+ * T069: Flush batched updates before showing error
+ * T125: Remove from active handlers tracking
  */
 export async function markFailed(
   handler: ResponseHandler,
@@ -104,6 +209,12 @@ export async function markFailed(
   handler.status = 'failed'
   handler.errorMessage = error.message
   handler.completionTime = Date.now()
+
+  // T125: Remove from active handlers
+  activeHandlers.delete(handler.requestID)
+
+  // T069: Flush any pending batched update
+  flushBatchedUpdate(handler.placeholderUUID)
 
   // Update block with error message
   await updateBlock(
@@ -118,10 +229,18 @@ export async function markFailed(
 
 /**
  * Cancel handler (aborts streaming request)
+ * T069: Flush batched updates before cancelling
+ * T125: Remove from active handlers tracking
  */
 export async function cancelHandler(handler: ResponseHandler): Promise<void> {
   handler.status = 'cancelled'
   handler.completionTime = Date.now()
+
+  // T125: Remove from active handlers
+  activeHandlers.delete(handler.requestID)
+
+  // T069: Flush any pending batched update
+  flushBatchedUpdate(handler.placeholderUUID)
 
   // Update block with cancellation message
   await updateBlock(
@@ -132,6 +251,17 @@ export async function cancelHandler(handler: ResponseHandler): Promise<void> {
   logger.info('Response cancelled', {
     requestID: handler.requestID,
   })
+}
+
+/**
+ * T069: Flush any pending batched update immediately
+ */
+function flushBatchedUpdate(blockUUID: string): void {
+  const existingTimeout = pendingUpdates.get(blockUUID)
+  if (existingTimeout) {
+    clearTimeout(existingTimeout)
+    pendingUpdates.delete(blockUUID)
+  }
 }
 
 /**

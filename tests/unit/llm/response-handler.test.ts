@@ -38,7 +38,7 @@ describe('ResponseHandler - Unit Tests', () => {
   describe('createResponseHandler', () => {
     it('should create handler with pending status', async () => {
       // Act
-      const handler = await createResponseHandler('parent-uuid')
+      const { handler } = await createResponseHandler('parent-uuid')
 
       // Assert
       expect(handler.status).toBe('pending')
@@ -48,8 +48,8 @@ describe('ResponseHandler - Unit Tests', () => {
 
     it('should generate unique request ID', async () => {
       // Act
-      const handler1 = await createResponseHandler()
-      const handler2 = await createResponseHandler()
+      const { handler: handler1 } = await createResponseHandler()
+      const { handler: handler2 } = await createResponseHandler()
 
       // Assert
       expect(handler1.requestID).not.toBe(handler2.requestID)
@@ -61,7 +61,8 @@ describe('ResponseHandler - Unit Tests', () => {
       const before = Date.now()
 
       // Act
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
 
       // Assert
       const after = Date.now()
@@ -83,10 +84,11 @@ describe('ResponseHandler - Unit Tests', () => {
 
     it('should store placeholder UUID', async () => {
       // Arrange
-      mockAppendBlockInPage.mockResolvedValue({ uuid: 'placeholder-abc' })
+      mockAppendBlockInPage.mockResolvedValue({ uuid: 'placeholder-abc' } as any)
 
       // Act
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
 
       // Assert
       expect(handler.placeholderUUID).toBe('placeholder-abc')
@@ -118,10 +120,20 @@ describe('ResponseHandler - Unit Tests', () => {
 
     it('should not have completion time initially', async () => {
       // Act
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
 
       // Assert
       expect(handler.completionTime).toBeUndefined()
+    })
+
+    it('should return AbortController for cancellation', async () => {
+      // Act
+      const { abortController } = await createResponseHandler()
+
+      // Assert
+      expect(abortController).toBeInstanceOf(AbortController)
+      expect(abortController.signal).toBeInstanceOf(AbortSignal)
     })
   })
 
@@ -129,7 +141,7 @@ describe('ResponseHandler - Unit Tests', () => {
     let handler: ResponseHandler
 
     beforeEach(async () => {
-      handler = await createResponseHandler('parent-uuid')
+      const result = await createResponseHandler('parent-uuid')
     })
 
     it('should accumulate content from chunk', async () => {
@@ -270,7 +282,7 @@ describe('ResponseHandler - Unit Tests', () => {
     let handler: ResponseHandler
 
     beforeEach(async () => {
-      handler = await createResponseHandler('parent-uuid')
+      const result = await createResponseHandler('parent-uuid')
       handler.accumulatedContent = 'Final response'
     })
 
@@ -343,7 +355,7 @@ describe('ResponseHandler - Unit Tests', () => {
     let handler: ResponseHandler
 
     beforeEach(async () => {
-      handler = await createResponseHandler('parent-uuid')
+      const result = await createResponseHandler('parent-uuid')
       handler.accumulatedContent = 'Partial content'
     })
 
@@ -431,7 +443,7 @@ describe('ResponseHandler - Unit Tests', () => {
     let handler: ResponseHandler
 
     beforeEach(async () => {
-      handler = await createResponseHandler('parent-uuid')
+      const result = await createResponseHandler('parent-uuid')
       handler.accumulatedContent = 'Some content'
     })
 
@@ -494,7 +506,8 @@ describe('ResponseHandler - Unit Tests', () => {
   describe('Handler State Transitions', () => {
     it('should transition from pending to streaming to completed', async () => {
       // Arrange
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
 
       // Act & Assert
       expect(handler.status).toBe('pending')
@@ -510,7 +523,8 @@ describe('ResponseHandler - Unit Tests', () => {
 
     it('should transition from pending to streaming to failed', async () => {
       // Arrange
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
 
       // Act & Assert
       expect(handler.status).toBe('pending')
@@ -526,7 +540,8 @@ describe('ResponseHandler - Unit Tests', () => {
 
     it('should transition from pending to cancelled', async () => {
       // Arrange
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
 
       // Act & Assert
       expect(handler.status).toBe('pending')
@@ -539,7 +554,8 @@ describe('ResponseHandler - Unit Tests', () => {
   describe('Handler Timing', () => {
     it('should track elapsed time correctly', async () => {
       // Arrange
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
       const startTime = handler.startTime
 
       // Wait a bit
@@ -555,7 +571,8 @@ describe('ResponseHandler - Unit Tests', () => {
 
     it('should measure time to failure', async () => {
       // Arrange
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
       const startTime = handler.startTime
 
       // Wait a bit
@@ -573,7 +590,8 @@ describe('ResponseHandler - Unit Tests', () => {
   describe('Edge Cases', () => {
     it('should handle rapid successive updates', async () => {
       // Arrange
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
       const updates = Array.from({ length: 50 }, (_, i) => `${i} `)
 
       // Act
@@ -590,7 +608,8 @@ describe('ResponseHandler - Unit Tests', () => {
 
     it('should handle very long content', async () => {
       // Arrange
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
       const longContent = 'A'.repeat(20000)
 
       // Act
@@ -604,7 +623,8 @@ describe('ResponseHandler - Unit Tests', () => {
 
     it('should handle completion without any updates', async () => {
       // Arrange
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
 
       // Act
       await markCompleted(handler)
@@ -616,7 +636,8 @@ describe('ResponseHandler - Unit Tests', () => {
 
     it('should handle failure without any updates', async () => {
       // Arrange
-      const handler = await createResponseHandler()
+      const { handler } = await createResponseHandler()
+
 
       // Act
       await markFailed(handler, new Error('Immediate failure'))

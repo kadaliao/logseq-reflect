@@ -109,6 +109,74 @@ export function validateTopP(value: unknown): ValidationResult {
 }
 
 /**
+ * Validate max_tokens property
+ * Must be positive integer
+ * T107: Added for Phase 9
+ */
+export function validateMaxTokens(value: unknown): ValidationResult {
+  const num = Number(value)
+
+  if (isNaN(num)) {
+    return {
+      isValid: false,
+      value: null,
+      error: 'Max tokens must be a number',
+    }
+  }
+
+  const intNum = Math.floor(num)
+
+  if (intNum <= 0) {
+    return {
+      isValid: false,
+      value: null,
+      error: 'Max tokens must be a positive integer',
+    }
+  }
+
+  return {
+    isValid: true,
+    value: intNum,
+  }
+}
+
+/**
+ * Validate streaming property
+ * Must be boolean or boolean-like string
+ * T107: Added for Phase 9
+ */
+export function validateStreaming(value: unknown): ValidationResult {
+  if (typeof value === 'boolean') {
+    return {
+      isValid: true,
+      value,
+    }
+  }
+
+  if (typeof value === 'string') {
+    const lower = value.toLowerCase().trim()
+    if (lower === 'true' || lower === 'yes' || lower === '1') {
+      return {
+        isValid: true,
+        value: true,
+      }
+    }
+    if (lower === 'false' || lower === 'no' || lower === '0') {
+      return {
+        isValid: true,
+        value: false,
+      }
+    }
+  }
+
+  return {
+    isValid: false,
+    value: null,
+    error: 'Streaming must be a boolean (true/false)',
+  }
+}
+
+/**
  * Validate use_context property
  * Must be boolean or boolean-like string
  */
@@ -176,6 +244,7 @@ export function validateContextStrategy(value: unknown): ValidationResult {
 /**
  * Validate block property value by property name
  * Routes to appropriate validator based on property name
+ * T107: Enhanced to support all ai-generate-* properties
  */
 export function validateBlockProperty(
   propertyName: string,
@@ -192,8 +261,14 @@ export function validateBlockProperty(
     case 'ai-generate-top_p':
       return validateTopP(value)
 
+    case 'ai-generate-max_tokens':
+      return validateMaxTokens(value)
+
     case 'ai-generate-use_context':
       return validateUseContext(value)
+
+    case 'ai-generate-streaming':
+      return validateStreaming(value)
 
     case 'ai-context':
       return validateContextStrategy(value)
@@ -245,13 +320,16 @@ export function validateBlockProperties(
 
 /**
  * Check if property name is recognized AI property
+ * T107: Updated to include new properties
  */
 export function isAIProperty(propertyName: string): boolean {
   const knownProperties = [
     'ai-generate-model',
     'ai-generate-temperature',
     'ai-generate-top_p',
+    'ai-generate-max_tokens',
     'ai-generate-use_context',
+    'ai-generate-streaming',
     'ai-model',
     'ai-context',
     'ai-context-menu-title',

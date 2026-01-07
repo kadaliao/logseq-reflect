@@ -65,6 +65,11 @@ export class LLMClient {
 
         const data = (await response.json()) as ChatCompletionResponse
 
+        // T126: Validate response structure
+        if (!this.isValidChatResponse(data)) {
+          throw new Error('Malformed response: missing required fields')
+        }
+
         logger.debug('Chat request successful', {
           id: data.id,
           model: data.model,
@@ -153,8 +158,8 @@ export class LLMClient {
 
       // Parse SSE stream and yield chunks
       for await (const chunk of parseSSEStream(response.body)) {
-        // Validate chunk structure before yielding
-        if (!chunk.choices || chunk.choices.length === 0) {
+        // T126: Validate chunk structure before yielding
+        if (!this.isValidStreamChunk(chunk)) {
           logger.warn('Received malformed chunk, skipping', { chunk })
           continue
         }
@@ -201,5 +206,65 @@ export class LLMClient {
    */
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  /**
+   * T126: Validate ChatCompletionResponse structure
+   * Ensures response has required fields
+   */
+  private isValidChatResponse(data: unknown): data is ChatCompletionResponse {
+    if (!data || typeof data !== 'object') {
+      return false
+    }
+
+    const response = data as Partial<ChatCompletionResponse>
+
+    // Check required fields
+    if (!response.id || !response.choices || !Array.isArray(response.choices)) {
+      return false
+    }
+
+    // Check at least one choice exists
+    if (response.choices.length === 0) {
+      return false
+    }
+
+    // Check first choice has message
+    const firstChoice = response.choices[0]
+    if (!firstChoice.message || typeof firstChoice.message.content !== 'string') {
+      return false
+    }
+
+    return true
+  }
+
+  /**
+   * T126: Validate ChatCompletionChunk structure
+   * Ensures chunk has required fields for streaming
+   */
+  private isValidStreamChunk(chunk: unknown): chunk is ChatCompletionChunk {
+    if (!chunk || typeof chunk !== 'object') {
+      return false
+    }
+
+    const streamChunk = chunk as Partial<ChatCompletionChunk>
+
+    // Check required fields
+    if (!streamChunk.choices || !Array.isArray(streamChunk.choices)) {
+      return false
+    }
+
+    // Check at least one choice exists
+    if (streamChunk.choices.length === 0) {
+      return false
+    }
+
+    // Check first choice has delta (content can be empty string, but delta must exist)
+    const firstChoice = streamChunk.choices[0]
+    if (!firstChoice.delta || typeof firstChoice.delta !== 'object') {
+      return false
+    }
+
+    return true
   }
 }

@@ -69,6 +69,7 @@ export async function parseBlockProperties(blockUUID: string): Promise<BlockProp
 
 /**
  * Extract AI properties from block object
+ * T104: Enhanced to support all ai-generate-* properties
  */
 function extractBlockProperties(block: unknown): Partial<BlockPropertySet> {
   if (!isBlockEntity(block) || !block.properties) {
@@ -93,8 +94,16 @@ function extractBlockProperties(block: unknown): Partial<BlockPropertySet> {
     properties.topP = validated['ai-generate-top_p'] as number
   }
 
+  if (validated['ai-generate-max_tokens'] !== undefined) {
+    properties.maxTokens = validated['ai-generate-max_tokens'] as number
+  }
+
   if (validated['ai-generate-use_context'] !== undefined) {
     properties.useContext = validated['ai-generate-use_context'] as boolean
+  }
+
+  if (validated['ai-generate-streaming'] !== undefined) {
+    properties.streaming = validated['ai-generate-streaming'] as boolean
   }
 
   return properties
@@ -202,6 +211,7 @@ function isBlockEntity(
 
 /**
  * Create empty property set
+ * T104: Updated to include all ai-generate-* properties
  */
 function createEmptyPropertySet(blockUUID: string): BlockPropertySet {
   return {
@@ -209,7 +219,9 @@ function createEmptyPropertySet(blockUUID: string): BlockPropertySet {
     model: null,
     temperature: null,
     topP: null,
+    maxTokens: null,
     useContext: null,
+    streaming: null,
     isInherited: false,
   }
 }

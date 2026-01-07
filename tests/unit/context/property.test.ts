@@ -321,4 +321,94 @@ describe('Property Parser', () => {
       expect(properties.model).toBe('llama3') // New value, not cached
     })
   })
+
+  describe('Enhanced Property Support (T101)', () => {
+    it('should support all ai-generate-* properties', async () => {
+      mockGetBlock.mockResolvedValueOnce({
+        uuid: 'block-1',
+        properties: {
+          'ai-generate-model': 'gpt-4-turbo',
+          'ai-generate-temperature': '0.8',
+          'ai-generate-top_p': '0.95',
+          'ai-generate-max_tokens': '4000',
+          'ai-generate-use_context': 'true',
+          'ai-generate-streaming': 'false',
+        },
+        parent: null,
+      })
+
+      const { parseBlockProperties, clearPropertyCache } = await import(
+        '../../../src/context/property'
+      )
+      clearPropertyCache()
+      const properties = await parseBlockProperties('block-1')
+
+      expect(properties.model).toBe('gpt-4-turbo')
+      expect(properties.temperature).toBe(0.8)
+      expect(properties.topP).toBe(0.95)
+      expect(properties.maxTokens).toBe(4000)
+      expect(properties.useContext).toBe(true)
+      expect(properties.streaming).toBe(false)
+    })
+
+    it('should handle property memoization for performance', async () => {
+      const block = {
+        uuid: 'block-1',
+        properties: {
+          'ai-generate-model': 'gpt-4',
+        },
+        parent: null,
+      }
+
+      mockGetBlock.mockResolvedValue(block)
+
+      const { parseBlockProperties, clearPropertyCache } = await import(
+        '../../../src/context/property'
+      )
+      clearPropertyCache()
+
+      // Parse same block multiple times
+      await parseBlockProperties('block-1')
+      await parseBlockProperties('block-1')
+      await parseBlockProperties('block-1')
+
+      // Should only call getBlock once (memoized)
+      expect(mockGetBlock).toHaveBeenCalledTimes(1)
+    })
+
+    it('should handle precedence for conflicting properties', async () => {
+      // Child properties should always take precedence over parent
+      const parentBlock = {
+        uuid: 'parent',
+        properties: {
+          'ai-generate-model': 'gpt-3.5',
+          'ai-generate-temperature': '0.3',
+        },
+        parent: null,
+      }
+
+      const childBlock = {
+        uuid: 'child',
+        properties: {
+          'ai-generate-model': 'gpt-4', // Override parent model
+          'ai-generate-temperature': '0.9', // Override parent temperature
+        },
+        parent: { id: 'parent' },
+      }
+
+      mockGetBlock
+        .mockResolvedValueOnce(childBlock)
+        .mockResolvedValueOnce(parentBlock)
+
+      const { parseBlockProperties, clearPropertyCache } = await import(
+        '../../../src/context/property'
+      )
+      clearPropertyCache()
+      const properties = await parseBlockProperties('child')
+
+      // Child values should win
+      expect(properties.model).toBe('gpt-4')
+      expect(properties.temperature).toBe(0.9)
+    })
+  })
 })

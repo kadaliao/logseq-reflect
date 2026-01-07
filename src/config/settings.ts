@@ -282,3 +282,221 @@ export function validateSettings(settings: PluginSettings): string[] {
 
   return errors
 }
+
+/**
+ * T112: Settings persistence helpers via Logseq storage API
+ */
+
+/**
+ * Current settings version for migration tracking
+ */
+const SETTINGS_VERSION = 1
+
+/**
+ * Save settings to Logseq storage
+ * Uses Logseq's built-in settings persistence
+ */
+export async function saveSettings(settings: PluginSettings): Promise<void> {
+  try {
+    // Validate before saving
+    const errors = validateSettings(settings)
+    if (errors.length > 0) {
+      throw new Error(`Invalid settings: ${errors.join(', ')}`)
+    }
+
+    // Flatten settings for Logseq storage format
+    const flattened = flattenSettings(settings)
+
+    // Add version for migration tracking
+    flattened['__version'] = SETTINGS_VERSION
+
+    await logseq.updateSettings(flattened)
+  } catch (error) {
+    throw new Error(`Failed to save settings: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+}
+
+/**
+ * Load settings from Logseq storage
+ * Returns merged settings with defaults
+ */
+export async function loadSettings(): Promise<PluginSettings> {
+  try {
+    const stored = logseq.settings as Record<string, any>
+
+    if (!stored || Object.keys(stored).length === 0) {
+      // No settings stored, return defaults
+      return DEFAULT_SETTINGS
+    }
+
+    // Check if migration needed
+    const storedVersion = stored['__version'] as number | undefined
+    if (storedVersion !== SETTINGS_VERSION) {
+      const migrated = migrateSettings(stored, storedVersion || 0)
+      await saveSettings(migrated)
+      return migrated
+    }
+
+    return mergeSettings(stored)
+  } catch (error) {
+    console.error('Failed to load settings, using defaults:', error)
+    return DEFAULT_SETTINGS
+  }
+}
+
+/**
+ * Flatten nested settings for Logseq storage
+ * Converts { llm: { baseURL: '...' } } to { 'llm.baseURL': '...' }
+ */
+function flattenSettings(settings: PluginSettings): Record<string, any> {
+  const flat: Record<string, any> = {}
+
+  // Flatten LLM settings
+  for (const [key, value] of Object.entries(settings.llm)) {
+    flat[`llm.${key}`] = value
+  }
+
+  // Top-level settings
+  flat['debugMode'] = settings.debugMode
+  flat['defaultContextStrategy'] = settings.defaultContextStrategy
+  flat['enableStreaming'] = settings.enableStreaming
+  flat['streamingUpdateInterval'] = settings.streamingUpdateInterval
+  flat['enableCustomCommands'] = settings.enableCustomCommands
+  flat['customCommandRefreshInterval'] = settings.customCommandRefreshInterval
+
+  return flat
+}
+
+/**
+ * T115: Settings migration support
+ * Migrates settings from older versions to current version
+ */
+export function migrateSettings(
+  oldSettings: Record<string, any>,
+  fromVersion: number
+): PluginSettings {
+  let settings = mergeSettings(oldSettings)
+
+  // Migration from version 0 to 1
+  if (fromVersion < 1) {
+    // Example: Rename old settings or add new defaults
+    // For now, just ensure all defaults are present
+    settings = mergeSettings(settings)
+  }
+
+  // Future migrations can be added here
+  // if (fromVersion < 2) { ... }
+
+  return settings
+}
+
+/**
+ * Reset settings to defaults
+ */
+export async function resetSettings(): Promise<void> {
+  await saveSettings(DEFAULT_SETTINGS)
+}
+
+/**
+ * Export settings as JSON
+ * Useful for backup or sharing configurations
+ */
+export function exportSettings(settings: PluginSettings): string {
+  return JSON.stringify(settings, null, 2)
+}
+
+/**
+ * Import settings from JSON
+ * Validates before returning
+ */
+export function importSettings(json: string): PluginSettings {
+  try {
+    const parsed = JSON.parse(json)
+    const settings = mergeSettings(parsed)
+
+    // Validate
+    const errors = validateSettings(settings)
+    if (errors.length > 0) {
+      throw new Error(`Invalid settings: ${errors.join(', ')}`)
+    }
+
+    return settings
+  } catch (error) {
+    throw new Error(`Failed to import settings: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+}
+
+/**
+ * T110: Documentation for block-level property inheritance
+ *
+ * ## Block Properties for AI Commands
+ *
+ * You can override AI settings at the block level using properties.
+ * These properties cascade from parent blocks to child blocks.
+ *
+ * ### Supported Properties
+ *
+ * - `ai-generate-model`: Override the model to use (e.g., "gpt-4", "claude-3-opus")
+ * - `ai-generate-temperature`: Override temperature (0.0-2.0, controls randomness)
+ * - `ai-generate-top_p`: Override top-p (0.0-1.0, nucleus sampling)
+ * - `ai-generate-max_tokens`: Override maximum tokens in response
+ * - `ai-generate-use_context`: Override context inclusion (true/false)
+ * - `ai-generate-streaming`: Override streaming mode (true/false)
+ *
+ * ### Property Inheritance
+ *
+ * Properties are inherited from parent blocks to child blocks:
+ *
+ * ```
+ * - Parent Block
+ *   ai-generate-model:: gpt-4
+ *   ai-generate-temperature:: 0.8
+ *   - Child Block 1
+ *     (inherits: model=gpt-4, temperature=0.8)
+ *   - Child Block 2
+ *     ai-generate-temperature:: 0.3
+ *     (inherits: model=gpt-4, overrides: temperature=0.3)
+ * ```
+ *
+ * ### Precedence Rules
+ *
+ * 1. Block-level properties override parent properties
+ * 2. Parent properties override grandparent properties
+ * 3. Root-level properties override plugin defaults
+ * 4. Plugin defaults are used when no properties are set
+ *
+ * ### Example Usage
+ *
+ * **Use GPT-4 for an entire page:**
+ * ```
+ * - Page Title
+ *   ai-generate-model:: gpt-4
+ *   - All child blocks will use GPT-4
+ *   - Unless they override with their own model
+ * ```
+ *
+ * **Use high temperature for creative writing:**
+ * ```
+ * - Creative Writing Section
+ *   ai-generate-temperature:: 1.2
+ *   - Story prompt here
+ *     (uses temperature 1.2 for more creativity)
+ * ```
+ *
+ * **Use specific model for code explanation:**
+ * ```
+ * - Code snippet
+ *   ai-generate-model:: claude-3-opus
+ *   function example() { ... }
+ *   - Explain this code
+ *     (will use Claude Opus for better code understanding)
+ * ```
+ *
+ * ### Validation
+ *
+ * All property values are validated:
+ * - Invalid values are logged as warnings but don't break commands
+ * - Out-of-range values (e.g., temperature > 2.0) are rejected
+ * - String values are coerced to appropriate types (e.g., "true" → boolean)
+ * - Invalid property names are ignored
+ */

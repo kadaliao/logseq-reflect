@@ -72,7 +72,7 @@ export function PromptInput({
   )
 
   return (
-    <form onSubmit={handleSubmit} style={styles['form']}>
+    <form onSubmit={handleSubmit} style={styles['form']} aria-label="AI prompt form">
       <div style={styles['container']}>
         <textarea
           ref={inputRef}
@@ -83,18 +83,20 @@ export function PromptInput({
           style={styles['textarea']}
           rows={3}
           aria-label="AI prompt input"
+          aria-describedby="prompt-hint"
+          aria-required="true"
         />
         <div style={styles['footer']}>
-          <div style={styles['hint']}>
+          <div style={styles['hint']} id="prompt-hint" aria-live="polite">
             {value.trim() ? `${value.trim().length} characters` : 'Cmd+Enter to submit'}
           </div>
-          <div style={styles['buttons']}>
+          <div style={styles['buttons']} role="group" aria-label="Form actions">
             {onCancel && (
               <button
                 type="button"
                 onClick={onCancel}
                 style={styles['cancelButton']}
-                aria-label="Cancel"
+                aria-label="Cancel AI prompt"
               >
                 Cancel
               </button>
@@ -106,7 +108,8 @@ export function PromptInput({
                 ...styles['submitButton'],
                 ...(value.trim() ? {} : styles['submitButtonDisabled']),
               }}
-              aria-label="Submit"
+              aria-label="Submit AI prompt"
+              aria-disabled={!value.trim()}
             >
               Ask AI
             </button>
@@ -126,8 +129,8 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: '8px',
     padding: '12px',
-    backgroundColor: '#fff',
-    border: '1px solid #ddd',
+    backgroundColor: 'var(--ls-primary-background-color, #fff)',
+    border: '1px solid var(--ls-border-color, #ddd)',
     borderRadius: '4px',
   },
   textarea: {
@@ -135,10 +138,12 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px',
     fontSize: '14px',
     lineHeight: '1.5',
-    border: '1px solid #ccc',
+    border: '1px solid var(--ls-border-color, #ccc)',
     borderRadius: '4px',
     resize: 'vertical',
     fontFamily: 'inherit',
+    backgroundColor: 'var(--ls-primary-background-color, #fff)',
+    color: 'var(--ls-primary-text-color, #000)',
   },
   footer: {
     display: 'flex',
@@ -147,7 +152,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   hint: {
     fontSize: '12px',
-    color: '#666',
+    color: 'var(--ls-secondary-text-color, #666)',
   },
   buttons: {
     display: 'flex',
@@ -156,22 +161,23 @@ const styles: Record<string, React.CSSProperties> = {
   cancelButton: {
     padding: '6px 12px',
     fontSize: '14px',
-    backgroundColor: '#f5f5f5',
-    border: '1px solid #ddd',
+    backgroundColor: 'var(--ls-secondary-background-color, #f5f5f5)',
+    color: 'var(--ls-primary-text-color, #000)',
+    border: '1px solid var(--ls-border-color, #ddd)',
     borderRadius: '4px',
     cursor: 'pointer',
   },
   submitButton: {
     padding: '6px 16px',
     fontSize: '14px',
-    backgroundColor: '#007bff',
+    backgroundColor: 'var(--ls-link-text-color, #007bff)',
     color: '#fff',
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
   },
   submitButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: 'var(--ls-quaternary-background-color, #ccc)',
     cursor: 'not-allowed',
   },
 }

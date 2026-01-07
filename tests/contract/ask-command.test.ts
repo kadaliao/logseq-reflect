@@ -87,23 +87,26 @@ describe('Ask AI Command - Contract Tests', () => {
       await executeAskCommand(settings)
 
       // Assert
-      expect(mockStream).toHaveBeenCalledWith({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: expect.stringContaining('helpful AI assistant'),
-          },
-          {
-            role: 'user',
-            content: 'What is TypeScript?',
-          },
-        ],
-        temperature: 0.7,
-        top_p: 1.0,
-        max_tokens: 2000,
-        stream: true,
-      })
+      expect(mockStream).toHaveBeenCalledWith(
+        {
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'system',
+              content: expect.stringContaining('helpful AI assistant'),
+            },
+            {
+              role: 'user',
+              content: 'What is TypeScript?',
+            },
+          ],
+          temperature: 0.7,
+          top_p: 1.0,
+          max_tokens: 2000,
+          stream: true,
+        },
+        expect.any(Object) // AbortSignal
+      )
     })
 
     it('should accumulate streaming chunks correctly', async () => {
@@ -320,7 +323,8 @@ describe('Ask AI Command - Contract Tests', () => {
               content: '  What is AI?  ', // Should preserve original spacing in message
             }),
           ]),
-        })
+        }),
+        expect.any(Object) // AbortSignal
       )
     })
   })
@@ -353,7 +357,7 @@ describe('Ask AI Command - Contract Tests', () => {
 
       // Assert - should show warning and not create any blocks
       expect(mockShowMsg).toHaveBeenCalledWith(
-        expect.stringContaining('write your question'),
+        expect.stringContaining('instruction or question'),
         'warning'
       )
       expect(mockInsertBlock).not.toHaveBeenCalled()

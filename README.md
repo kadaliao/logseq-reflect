@@ -91,6 +91,45 @@ ollama pull llama3
 - **Cmd+Shift+P** (or configured shortcut): Open command palette
 - Type `/ai` in editor: Quick access to AI commands
 - Right-click on blocks: Context menu with applicable AI commands
+- Toolbar button: Click AI icon for quick access
+
+### Available Commands
+
+#### Ask AI
+- **Command**: `/ai` or "Ask AI" from command palette
+- **Description**: Ask a question and get an answer as a new block
+- **Example**: Type "What is quantum computing?" and run `/ai`
+
+#### Ask with Page Context
+- **Command**: `/ai-page` or "Ask AI with Page Context"
+- **Description**: Ask a question with entire page content as context
+- **Example**: Type "Summarize the main points" on a page and run `/ai-page`
+
+#### Ask with Block Context
+- **Command**: `/ai-block` or "Ask AI with Block Context"
+- **Description**: Ask a question with current block tree as context
+- **Example**: Select a block with content and run `/ai-block`
+
+#### Summarize Page
+- **Command**: `/summarize-page` or "Summarize Page"
+- **Description**: Generate a concise summary of the current page
+- **Streaming**: Yes (incremental updates)
+
+#### Summarize Block
+- **Command**: `/summarize-block` or "Summarize Block"
+- **Description**: Summarize the selected block tree
+- **Streaming**: Yes (incremental updates)
+
+#### Generate Flashcard
+- **Command**: `/flashcard` or "Generate Flashcard"
+- **Description**: Convert block content into Q&A flashcard with #card tag
+- **Example**: Select factual content and run `/flashcard`
+
+#### Divide into Subtasks
+- **Command**: `/divide` or `/subtasks`
+- **Description**: Break down TODO items into nested subtasks
+- **Requirements**: Block must have TODO marker
+- **Example**: Run on "TODO Build landing page" to get structured subtasks
 
 ### Custom Commands
 
@@ -113,6 +152,70 @@ Override AI settings per block:
   ai-generate-temperature:: 0.8
   - Child blocks inherit these settings automatically
 ```
+
+**Supported Properties:**
+- `ai-generate-model`: Override model name
+- `ai-generate-temperature`: Set temperature (0.0-2.0)
+- `ai-generate-top_p`: Set top_p for nucleus sampling (0.0-1.0)
+- `ai-generate-use_context`: Enable/disable context inclusion (true/false)
+
+Properties inherit from parent blocks to children.
+
+## Troubleshooting
+
+### Connection Errors
+
+**Error**: "Could not connect to AI model"
+
+**Solutions:**
+- Verify your LLM endpoint is running: `curl http://localhost:11434`
+- Check the Base URL in plugin settings
+- Ensure firewall isn't blocking the connection
+- For Ollama: Run `ollama serve` to start the service
+
+### Timeout Errors
+
+**Error**: "Request timeout after Xs"
+
+**Solutions:**
+- Increase timeout in plugin settings (default: 30s)
+- Use a faster model or smaller context
+- Check network connection to AI endpoint
+- Reduce max context tokens in settings
+
+### Empty or Malformed Responses
+
+**Issue**: AI returns blank or unexpected responses
+
+**Solutions:**
+- Verify model supports OpenAI-compatible format
+- Check API key is correct (if required)
+- Enable debug mode in settings to see detailed logs
+- Test endpoint with curl:
+  ```bash
+  curl -X POST http://localhost:11434/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{"model":"llama3","messages":[{"role":"user","content":"Hello"}]}'
+  ```
+
+### Plugin Not Loading
+
+**Issue**: Plugin fails to initialize
+
+**Solutions:**
+- Check Logseq version (requires ≥0.9.0)
+- Review browser console for error messages (Cmd+Option+I)
+- Try reinstalling: Remove plugin → Restart Logseq → Reinstall
+- Check plugin directory permissions
+
+### Streaming Not Working
+
+**Issue**: Responses appear all at once instead of incrementally
+
+**Solutions:**
+- Verify "Streaming Enabled" is true in settings
+- Check that your LLM endpoint supports SSE streaming
+- Some models may not stream properly - try a different model
 
 ## Development
 

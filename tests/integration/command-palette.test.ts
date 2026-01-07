@@ -151,7 +151,9 @@ describe('Command Palette Integration Tests', () => {
         expect.objectContaining({
           model: 'gpt-3.5-turbo',
           temperature: 0.5,
-        })
+        },
+        expect.any(Object) // AbortSignal
+      )
       )
     })
 

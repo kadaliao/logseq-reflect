@@ -150,6 +150,7 @@ export interface ResponseHandler {
 /**
  * BlockPropertySet interface - Block-level property overrides
  * T014: Define BlockPropertySet interface
+ * T104: Enhanced to support all ai-generate-* properties
  */
 export interface BlockPropertySet {
   /** UUID of the block these properties belong to */
@@ -164,8 +165,14 @@ export interface BlockPropertySet {
   /** Override top_p (from ai-generate-top_p) */
   topP?: number | null
 
+  /** Override max_tokens (from ai-generate-max_tokens) */
+  maxTokens?: number | null
+
   /** Whether to include context (from ai-generate-use_context) */
   useContext?: boolean | null
+
+  /** Override streaming mode (from ai-generate-streaming) */
+  streaming?: boolean | null
 
   /** Whether properties are inherited from ancestor blocks */
   isInherited: boolean
