@@ -16,6 +16,7 @@ import {
   markFailed,
 } from '../llm/response-handler'
 import { createLogger } from '../utils/logger'
+import { splitMultiLineFlashcard, type FlashcardBlock } from '../utils/formatter'
 
 const logger = createLogger('FlashcardCommand')
 
@@ -30,11 +31,20 @@ Create question-answer pairs in the following format:
 - Add #card tag at the end of the answer
 - Focus on key facts, concepts, and definitions
 - Make questions clear and specific
-- Keep answers concise but complete
+
+CRITICAL FORMATTING RULES:
+- Keep answers on a SINGLE line (no line breaks within answers)
+- If an answer is long, break it into multiple separate flashcards instead
+- Do NOT use nested lists, bullet points, or indentation in answers
+- Do NOT use code blocks or tables in answers
+- Each Q&A pair should be completely independent
 
 Example format:
 Q: What is the capital of France?
 A: Paris #card
+
+Q: What are the three primary colors?
+A: Red, blue, and yellow (not red/blue/yellow on separate lines) #card
 
 If the content has multiple facts, create multiple Q&A pairs separated by blank lines.`
 
@@ -145,7 +155,7 @@ export async function handleGenerateFlashcard(
         await markCompleted(handler)
 
         // T077: Parse and create nested blocks with #card tags
-        await createFlashcardBlocks(blockUUID, handler.accumulatedContent)
+        await createFlashcardBlocks(blockUUID, handler.accumulatedContent, effectiveSettings)
 
         logger.info('Flashcard generation completed successfully')
       } catch (error) {
@@ -165,7 +175,7 @@ export async function handleGenerateFlashcard(
         await markCompleted(handler)
 
         // T077: Parse and create nested blocks with #card tags
-        await createFlashcardBlocks(blockUUID, content)
+        await createFlashcardBlocks(blockUUID, content, effectiveSettings)
 
         logger.info('Flashcard generation completed successfully')
       } catch (error) {
@@ -210,10 +220,12 @@ function extractBlockContent(block: any): string {
 /**
  * T077: Create nested flashcard blocks with #card tags
  * Parses the AI response and creates separate blocks for questions and answers
+ * Supports multi-line answers by creating child blocks
  */
 async function createFlashcardBlocks(
   parentBlockUUID: string,
-  aiResponse: string
+  aiResponse: string,
+  settings: PluginSettings
 ): Promise<void> {
   logger.debug('Creating flashcard blocks from AI response')
 
@@ -230,14 +242,11 @@ async function createFlashcardBlocks(
     }
   }
 
-  // Parse Q&A pairs from the response
-  // Expected format: "Q: question\nA: answer #card"
-  const qaPattern = /Q:\s*(.+?)\s*\nA:\s*(.+?)(?=\n\nQ:|$)/gs
-  const matches = [...aiResponse.matchAll(qaPattern)]
+  // Parse flashcards with multi-line support
+  const flashcardBlocks = splitMultiLineFlashcard(aiResponse)
 
-  if (matches.length === 0) {
-    // Fallback: create a single block with the entire response
-    logger.warn('Could not parse Q&A pairs, creating single flashcard block')
+  if (flashcardBlocks.length === 0) {
+    logger.warn('Could not parse flashcard blocks, creating single block')
     await logseq.Editor.insertBlock(
       parentBlockUUID,
       `${aiResponse}${aiResponse.includes('#card') ? '' : ' #card'}`,
@@ -246,30 +255,56 @@ async function createFlashcardBlocks(
     return
   }
 
-  // Create separate blocks for each Q&A pair
-  for (const match of matches) {
-    const question = match[1].trim()
-    const answer = match[2].trim()
+  // Create blocks based on parsed structure
+  let currentQuestionBlock: any = null
+  let currentAnswerBlock: any = null
 
-    // Create question block
-    const questionBlock = await logseq.Editor.insertBlock(
-      parentBlockUUID,
-      `Q: ${question}`,
-      { sibling: false }
-    )
-
-    if (questionBlock) {
-      // Create answer block as child of question
-      const answerContent = answer.includes('#card') ? answer : `${answer} #card`
-      await logseq.Editor.insertBlock(
-        questionBlock.uuid,
-        `A: ${answerContent}`,
+  for (const block of flashcardBlocks) {
+    if (block.type === 'question') {
+      // Create question block
+      currentQuestionBlock = await logseq.Editor.insertBlock(
+        parentBlockUUID,
+        block.content,
         { sibling: false }
       )
+      currentAnswerBlock = null // Reset answer block
+    } else if (block.type === 'answer') {
+      if (currentQuestionBlock) {
+        if (block.hasCard) {
+          // This is the main answer block (first line)
+          currentAnswerBlock = await logseq.Editor.insertBlock(
+            currentQuestionBlock.uuid,
+            block.content,
+            { sibling: false }
+          )
+        } else if (currentAnswerBlock) {
+          // This is a child line of a multi-line answer
+          await logseq.Editor.insertBlock(
+            currentAnswerBlock.uuid,
+            block.content,
+            { sibling: false }
+          )
+        } else {
+          // Fallback: create as sibling of question
+          await logseq.Editor.insertBlock(
+            currentQuestionBlock.uuid,
+            block.content,
+            { sibling: false }
+          )
+        }
+      } else {
+        // Fallback: create as top-level
+        await logseq.Editor.insertBlock(
+          parentBlockUUID,
+          block.content,
+          { sibling: false }
+        )
+      }
     }
   }
 
-  logger.info(`Created ${matches.length} flashcard Q&A pair(s)`)
+  const questionCount = flashcardBlocks.filter((b) => b.type === 'question').length
+  logger.info(`Created ${questionCount} flashcard Q&A pair(s)`)
 }
 
 /**

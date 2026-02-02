@@ -43,7 +43,7 @@ describe('Block Creation and Update Integration Tests', () => {
       const parentUUID = 'parent-block-123'
 
       // Act
-      const handler = await createResponseHandler(parentUUID)
+      const { handler } = await createResponseHandler(parentUUID)
 
       // Assert
       expect(mockInsertBlock).toHaveBeenCalledWith(
@@ -102,8 +102,8 @@ describe('Block Creation and Update Integration Tests', () => {
 
     it('should generate unique request ID for each handler', async () => {
       // Act
-      const handler1 = await createResponseHandler()
-      const handler2 = await createResponseHandler()
+      const { handler: handler1 } = await createResponseHandler()
+      const { handler: handler2 } = await createResponseHandler()
 
       // Assert
       expect(handler1.requestID).not.toBe(handler2.requestID)
@@ -115,7 +115,8 @@ describe('Block Creation and Update Integration Tests', () => {
     let handler: ResponseHandler
 
     beforeEach(async () => {
-      handler = await createResponseHandler('parent-uuid')
+      const result = await createResponseHandler('parent-uuid')
+      handler = result.handler
     })
 
     it('should accumulate content from streaming chunks', async () => {
@@ -211,7 +212,8 @@ describe('Block Creation and Update Integration Tests', () => {
     let handler: ResponseHandler
 
     beforeEach(async () => {
-      handler = await createResponseHandler('parent-uuid')
+      const result = await createResponseHandler('parent-uuid')
+      handler = result.handler
       handler.accumulatedContent = 'Final response content'
     })
 
@@ -255,7 +257,8 @@ describe('Block Creation and Update Integration Tests', () => {
     let handler: ResponseHandler
 
     beforeEach(async () => {
-      handler = await createResponseHandler('parent-uuid')
+      const result = await createResponseHandler('parent-uuid')
+      handler = result.handler
     })
 
     it('should mark block as failed with error message', async () => {
@@ -319,8 +322,8 @@ describe('Block Creation and Update Integration Tests', () => {
   describe('Concurrent Block Updates', () => {
     it('should handle multiple concurrent handlers', async () => {
       // Arrange
-      const handler1 = await createResponseHandler('parent-1')
-      const handler2 = await createResponseHandler('parent-2')
+      const { handler: handler1 } = await createResponseHandler('parent-1')
+      const { handler: handler2 } = await createResponseHandler('parent-2')
 
       mockInsertBlock
         .mockResolvedValueOnce({ uuid: 'block-1' })
@@ -345,8 +348,8 @@ describe('Block Creation and Update Integration Tests', () => {
         .mockResolvedValueOnce({ uuid: 'block-a' })
         .mockResolvedValueOnce({ uuid: 'block-b' })
 
-      const handler1 = await createResponseHandler('parent-a')
-      const handler2 = await createResponseHandler('parent-b')
+      const { handler: handler1 } = await createResponseHandler('parent-a')
+      const { handler: handler2 } = await createResponseHandler('parent-b')
 
       // Act - simulate concurrent streaming
       await Promise.all([
@@ -370,7 +373,7 @@ describe('Block Creation and Update Integration Tests', () => {
       // Arrange
       mockInsertBlock.mockReset()
       mockInsertBlock.mockResolvedValue({ uuid: 'new-block-uuid' })
-      const handler = await createResponseHandler('parent-uuid')
+      const { handler } = await createResponseHandler('parent-uuid')
       const longContent = 'A'.repeat(15000)
       const chunk = { choices: [{ delta: { content: longContent } }] }
 
@@ -386,7 +389,7 @@ describe('Block Creation and Update Integration Tests', () => {
       // Arrange
       mockInsertBlock.mockReset()
       mockInsertBlock.mockResolvedValue({ uuid: 'new-block-uuid' })
-      const handler = await createResponseHandler('parent-uuid')
+      const { handler } = await createResponseHandler('parent-uuid')
       const specialContent = '# Title\n- List item\n[[Link]] `code`'
       const chunk = { choices: [{ delta: { content: specialContent } }] }
 
@@ -400,7 +403,7 @@ describe('Block Creation and Update Integration Tests', () => {
 
     it('should handle unicode and emoji content', async () => {
       // Arrange
-      const handler = await createResponseHandler('parent-uuid')
+      const { handler } = await createResponseHandler('parent-uuid')
       const unicodeContent = '你好 🎉 مرحبا Привет'
       const chunk = { choices: [{ delta: { content: unicodeContent } }] }
 
@@ -413,7 +416,7 @@ describe('Block Creation and Update Integration Tests', () => {
 
     it('should handle rapid successive updates', async () => {
       // Arrange
-      const handler = await createResponseHandler('parent-uuid')
+      const { handler } = await createResponseHandler('parent-uuid')
       const updates = Array.from({ length: 100 }, (_, i) => ({
         choices: [{ delta: { content: `${i} ` } }],
       }))
@@ -433,7 +436,7 @@ describe('Block Creation and Update Integration Tests', () => {
   describe('Block Lifecycle', () => {
     it('should transition through complete lifecycle: create -> update -> complete', async () => {
       // Arrange
-      const handler = await createResponseHandler('parent-uuid')
+      const { handler } = await createResponseHandler('parent-uuid')
 
       // Act - complete lifecycle
       expect(handler.status).toBe('pending')
@@ -453,7 +456,7 @@ describe('Block Creation and Update Integration Tests', () => {
 
     it('should transition to failed state on error', async () => {
       // Arrange
-      const handler = await createResponseHandler('parent-uuid')
+      const { handler } = await createResponseHandler('parent-uuid')
 
       // Act
       await updateWithChunk(handler, {

@@ -17,6 +17,7 @@ import {
   markFailed,
 } from '../llm/response-handler'
 import { createLogger } from '../utils/logger'
+import { sanitizeForLogseq, formatTaskSubtasks } from '../utils/formatter'
 
 const logger = createLogger('TasksCommand')
 
@@ -32,6 +33,16 @@ Create a list of subtasks in the following format:
 - Keep subtasks focused and atomic (completable in one session)
 - Aim for 3-7 subtasks unless the task is very complex
 
+CRITICAL FORMATTING RULES:
+- Use ONLY flat lists with single "- " prefix (no indentation)
+- Do NOT create nested subtasks with multiple indentation levels
+- Do NOT use "  - " or "    - " (no leading spaces before dash)
+- All subtasks should be at the SAME indentation level
+- If you need sub-subtasks, create them as separate flat subtasks with clear numbering
+- IMPORTANT: When mentioning tags or pages, use [[PageName]] format with spaces around it
+- IMPORTANT: Do NOT write things like "在#Douban标签" - instead write "在 [[Douban]] 标签" or just "在Douban标签"
+- Tags should always be surrounded by spaces: "text [[tag]] more text"
+
 Example format for a TODO item:
 TODO Design user authentication system
 
@@ -43,7 +54,7 @@ Should become:
 - TODO Add session management
 - TODO Write authentication tests
 
-Only output the subtasks, nothing else.`
+Only output the subtasks, nothing else. Do not indent any subtasks.`
 
 /**
  * Valid TODO markers that Logseq recognizes
@@ -155,7 +166,7 @@ export async function handleDivideIntoSubtasks(
         await markCompleted(handler)
 
         // T086: Parse and create nested subtask blocks
-        await createSubtaskBlocks(blockUUID, handler.accumulatedContent, marker)
+        await createSubtaskBlocks(blockUUID, handler.accumulatedContent, marker, effectiveSettings)
 
         logger.info('Task breakdown completed successfully')
       } catch (error) {
@@ -175,7 +186,7 @@ export async function handleDivideIntoSubtasks(
         await markCompleted(handler)
 
         // T086: Parse and create nested subtask blocks
-        await createSubtaskBlocks(blockUUID, content, marker)
+        await createSubtaskBlocks(blockUUID, content, marker, effectiveSettings)
 
         logger.info('Task breakdown completed successfully')
       } catch (error) {
@@ -216,13 +227,23 @@ function detectTodoMarker(block: any): string | null {
 /**
  * T086: Create nested subtask blocks with proper indentation
  * Parses the AI response and creates child blocks under the parent TODO
+ * Applies formatting to flatten nested lists and normalize markers
  */
 async function createSubtaskBlocks(
   parentBlockUUID: string,
   aiResponse: string,
-  marker: string
+  marker: string,
+  settings: PluginSettings
 ): Promise<void> {
   logger.debug('Creating subtask blocks from AI response')
+
+  // Debug: Log the raw AI response
+  logger.info('Raw AI response:', {
+    length: aiResponse.length,
+    preview: aiResponse.substring(0, 200),
+    hasNewlines: aiResponse.includes('\n'),
+    newlineCount: (aiResponse.match(/\n/g) || []).length,
+  })
 
   // Remove the placeholder block first
   const blocks = await logseq.Editor.getBlock(parentBlockUUID, {
@@ -237,28 +258,56 @@ async function createSubtaskBlocks(
     }
   }
 
-  // Parse subtasks from response
-  // Expected format: "- TODO Subtask description"
-  const lines = aiResponse.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+  // Apply formatting if enabled
+  let formattedResponse = aiResponse
+
+  if (settings.enableFormatting) {
+    // First apply general sanitization
+    formattedResponse = sanitizeForLogseq(formattedResponse, {
+      enableFormatting: true,
+      logModifications: settings.logFormattingModifications,
+      commandType: 'tasks',
+    })
+
+    logger.debug('After sanitizeForLogseq:', {
+      length: formattedResponse.length,
+      preview: formattedResponse.substring(0, 200),
+      hasNewlines: formattedResponse.includes('\n'),
+    })
+
+    // Then apply task-specific formatting
+    formattedResponse = formatTaskSubtasks(formattedResponse, marker)
+
+    logger.debug('After formatTaskSubtasks:', {
+      length: formattedResponse.length,
+      preview: formattedResponse.substring(0, 200),
+      hasNewlines: formattedResponse.includes('\n'),
+    })
+  }
+
+  // Parse subtasks from formatted response
+  const lines = formattedResponse
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+
+  logger.debug('Parsed lines:', {
+    count: lines.length,
+    lines: lines,
+  })
 
   const subtasks: string[] = []
   for (const line of lines) {
     // Match lines starting with "- " (markdown list)
     if (line.startsWith('- ')) {
-      const subtask = line.substring(2).trim()
-
-      // Ensure subtask has the correct marker
-      // If it already has a marker, keep it; otherwise add parent's marker
-      let formattedSubtask = subtask
-      const hasMarker = TODO_MARKERS.some(m => subtask.startsWith(`${m} `))
-
-      if (!hasMarker) {
-        formattedSubtask = `${marker} ${subtask}`
-      }
-
-      subtasks.push(formattedSubtask)
+      subtasks.push(line.substring(2).trim())
     }
   }
+
+  logger.debug('Extracted subtasks:', {
+    count: subtasks.length,
+    subtasks: subtasks,
+  })
 
   if (subtasks.length === 0) {
     // Fallback: if no proper list format, try to parse any TODO markers
@@ -272,6 +321,11 @@ async function createSubtaskBlocks(
         }
       }
     }
+
+    logger.debug('Fallback subtasks:', {
+      count: subtasks.length,
+      subtasks: subtasks,
+    })
   }
 
   if (subtasks.length === 0) {
@@ -284,19 +338,31 @@ async function createSubtaskBlocks(
   }
 
   // Create subtask blocks as children of parent
-  for (const subtask of subtasks) {
-    await logseq.Editor.insertBlock(
-      parentBlockUUID,
-      subtask,
-      { sibling: false } // Insert as child, not sibling
-    )
+  logger.info(`Creating ${subtasks.length} blocks as children of ${parentBlockUUID}`)
+
+  for (let i = 0; i < subtasks.length; i++) {
+    const subtask = subtasks[i]
+    logger.debug(`Creating subtask ${i + 1}/${subtasks.length}: "${subtask}"`)
+
+    try {
+      const createdBlock = await logseq.Editor.insertBlock(
+        parentBlockUUID,
+        subtask,
+        { sibling: false } // Insert as child, not sibling
+      )
+
+      if (createdBlock) {
+        logger.debug(`Successfully created block with UUID: ${createdBlock.uuid}`)
+      } else {
+        logger.error(`Failed to create block for subtask: "${subtask}"`)
+      }
+    } catch (error) {
+      logger.error(`Error creating subtask block: ${error}`, error as Error)
+    }
   }
 
   logger.info(`Created ${subtasks.length} subtask(s)`)
-  await logseq.App.showMsg(
-    `✅ Created ${subtasks.length} subtask(s)`,
-    'success'
-  )
+  await logseq.App.showMsg(`✅ Created ${subtasks.length} subtask(s)`, 'success')
 }
 
 /**

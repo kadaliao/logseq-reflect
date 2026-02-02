@@ -16,6 +16,7 @@ import {
 } from '../llm/response-handler'
 import { extractPageContext, extractBlockContext } from '../context/extractor'
 import { createLogger } from '../utils/logger'
+import { sanitizeForLogseq, formatSummaryList } from '../utils/formatter'
 
 const logger = createLogger('SummarizeCommands')
 
@@ -30,7 +31,14 @@ Focus on:
 - Actionable takeaways
 - Logical structure and flow
 
-Keep the summary brief and to the point. Use bullet points or paragraphs as appropriate.`
+IMPORTANT FORMATTING RULES:
+- Use ONLY flat, single-level bullet lists (start with "- ")
+- Do NOT create nested or indented sub-bullets
+- Keep each bullet point on a single line
+- Avoid code blocks, tables, or complex markdown structures
+- Use simple paragraphs or flat lists only
+
+Keep the summary brief and to the point.`
 
 const SUMMARIZE_BLOCK_SYSTEM_PROMPT = `You are a helpful AI assistant integrated into Logseq. Your task is to create a concise summary of the provided block and its children.
 
@@ -38,6 +46,12 @@ Focus on:
 - Main topic and key points
 - Important details and insights
 - Overall purpose or conclusion
+
+IMPORTANT FORMATTING RULES:
+- Use ONLY flat, single-level bullet lists (start with "- ")
+- Do NOT create nested or indented sub-bullets
+- Keep each bullet point on a single line
+- Avoid code blocks, tables, or complex markdown structures
 
 Keep the summary brief and focused.`
 
@@ -96,8 +110,12 @@ export async function handleSummarizePage(
     const currentBlock = await logseq.Editor.getCurrentBlock()
     const parentBlockUUID = currentBlock?.uuid
 
-    // Create response handler (T070: with abort controller)
+    // Always create a handler (with placeholder child block)
+    // We'll decide later whether to use current block or placeholder
     const { handler, abortController } = await createResponseHandler(parentBlockUUID)
+
+    // Check if current block is empty (after stripping whitespace)
+    const isCurrentBlockEmpty = !currentBlock?.content || currentBlock.content.trim() === ''
 
     // Create LLM client
     const client = new LLMClient(effectiveSettings.llm)
@@ -127,6 +145,9 @@ export async function handleSummarizePage(
       request,
       handler,
       effectiveSettings.llm.streamingEnabled,
+      effectiveSettings,
+      parentBlockUUID,
+      isCurrentBlockEmpty,
       abortController.signal
     )
 
@@ -189,6 +210,9 @@ export async function handleSummarizeBlock(
       })
     }
 
+    // Use the current block as parent for summary
+    const parentBlockUUID = blockUUID
+
     // Create response handler (T070: with abort controller)
     const { handler, abortController } = await createResponseHandler(blockUUID)
 
@@ -220,6 +244,9 @@ export async function handleSummarizeBlock(
       request,
       handler,
       effectiveSettings.llm.streamingEnabled,
+      effectiveSettings,
+      parentBlockUUID,
+      false, // summarize-block always uses placeholder
       abortController.signal
     )
 
@@ -238,12 +265,16 @@ export async function handleSummarizeBlock(
  * Execute LLM request with streaming or non-streaming mode
  * Shared logic for both summarization commands
  * T070: Supports cancellation via AbortSignal
+ * Applies formatting to fix list concatenation issues
  */
 async function executeRequest(
   client: LLMClient,
   request: ChatCompletionRequest,
   handler: ResponseHandler,
   streaming: boolean,
+  settings: PluginSettings,
+  parentBlockUUID: string | undefined,
+  useParentBlock: boolean,
   cancelSignal?: AbortSignal
 ): Promise<void> {
   if (streaming) {
@@ -255,7 +286,14 @@ async function executeRequest(
         await updateWithChunk(handler, chunk)
       }
 
-      await markCompleted(handler)
+      // Apply formatting and create blocks
+      await createSummaryBlocks(
+        handler.accumulatedContent,
+        settings,
+        parentBlockUUID,
+        useParentBlock,
+        handler.placeholderUUID
+      )
     } catch (error) {
       await markFailed(handler, error as Error)
       throw error
@@ -268,13 +306,137 @@ async function executeRequest(
       const content = response.choices[0]?.message.content || ''
 
       handler.accumulatedContent = content
-      await logseq.Editor.updateBlock(handler.placeholderUUID, content)
 
-      await markCompleted(handler)
+      // Apply formatting and create blocks
+      await createSummaryBlocks(
+        content,
+        settings,
+        parentBlockUUID,
+        useParentBlock,
+        handler.placeholderUUID
+      )
     } catch (error) {
       await markFailed(handler, error as Error)
       throw error
     }
+  }
+}
+
+/**
+ * Create summary blocks from AI response
+ * Parses the response and creates child blocks for list items
+ *
+ * @param aiResponse - The AI-generated summary content
+ * @param settings - Plugin settings for formatting options
+ * @param parentBlockUUID - The parent block UUID (user's current block)
+ * @param useParentBlock - If true, use parent block for header; if false, use placeholder
+ * @param placeholderUUID - The placeholder block UUID (created for streaming)
+ */
+async function createSummaryBlocks(
+  aiResponse: string,
+  settings: PluginSettings,
+  parentBlockUUID: string | undefined,
+  useParentBlock: boolean,
+  placeholderUUID: string
+): Promise<void> {
+  logger.debug('Creating summary blocks from AI response', {
+    parentBlockUUID,
+    useParentBlock,
+    placeholderUUID,
+  })
+
+  // Apply formatting if enabled
+  let formattedResponse = aiResponse
+
+  if (settings.enableFormatting) {
+    // First apply general sanitization (flatten nested lists, normalize tags, etc.)
+    formattedResponse = sanitizeForLogseq(formattedResponse, {
+      enableFormatting: true,
+      logModifications: settings.logFormattingModifications,
+      commandType: 'summarize',
+    })
+
+    // Then apply summary-specific formatting (fix concatenated list items)
+    formattedResponse = formatSummaryList(formattedResponse)
+
+    logger.debug('Applied formatting to summary', {
+      originalLength: aiResponse.length,
+      formattedLength: formattedResponse.length,
+    })
+  }
+
+  // Parse the response to separate list items from other content
+  const lines = formattedResponse.split('\n')
+  const listItems: string[] = []
+  const nonListContent: string[] = []
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('- ')) {
+      // This is a list item
+      listItems.push(trimmed.substring(2).trim())
+    } else if (trimmed.length > 0) {
+      // This is regular content (paragraph, heading, etc.)
+      nonListContent.push(trimmed)
+    }
+  }
+
+  logger.debug('Parsed summary content:', {
+    listItems: listItems.length,
+    nonListLines: nonListContent.length,
+  })
+
+  // Determine which block to use as the header
+  let headerBlockUUID: string
+
+  if (useParentBlock && parentBlockUUID) {
+    // Use parent block as header, remove the placeholder
+    headerBlockUUID = parentBlockUUID
+    await logseq.Editor.removeBlock(placeholderUUID)
+  } else {
+    // Use placeholder block as header
+    headerBlockUUID = placeholderUUID
+  }
+
+  // Update the header block with content
+  if (nonListContent.length > 0) {
+    // Use the AI-generated non-list content as header
+    const headerContent = nonListContent.join('\n')
+    await logseq.Editor.updateBlock(headerBlockUUID, headerContent)
+  } else {
+    // If there's no non-list content, set it to "Summary"
+    await logseq.Editor.updateBlock(headerBlockUUID, 'Summary')
+  }
+
+  // Create child blocks for list items under the header block
+  if (listItems.length > 0) {
+    logger.info(`Creating ${listItems.length} summary blocks as children of ${headerBlockUUID}`)
+
+    for (let i = 0; i < listItems.length; i++) {
+      const item = listItems[i]
+      logger.debug(`Creating summary block ${i + 1}/${listItems.length}: "${item}"`)
+
+      try {
+        const createdBlock = await logseq.Editor.insertBlock(
+          headerBlockUUID,
+          item,
+          { sibling: false } // Insert as child, not sibling
+        )
+
+        if (createdBlock) {
+          logger.debug(`Successfully created block with UUID: ${createdBlock.uuid}`)
+        } else {
+          logger.error(`Failed to create block for item: "${item}"`)
+        }
+      } catch (error) {
+        logger.error(`Error creating summary block: ${error}`, error as Error)
+      }
+    }
+
+    await logseq.App.showMsg(`✅ Created summary with ${listItems.length} point(s)`, 'success')
+  } else {
+    // No list items, just show completion message
+    await logseq.App.showMsg('✅ Summary completed', 'success')
   }
 }
 

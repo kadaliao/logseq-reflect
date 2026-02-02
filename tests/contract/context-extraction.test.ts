@@ -70,13 +70,14 @@ describe('Context Extraction Contract', () => {
       expect(context).toBeDefined()
       expect(context.type).toBe('page')
 
-      // Contract: content must preserve hierarchy with indentation
+      // Contract: content must include all blocks (no longer with indentation)
+      // Indentation removed to prevent LLM confusion
       expect(context.content).toContain('# Project Goals')
-      expect(context.content).toContain('  Goal 1: Complete feature implementation')
-      expect(context.content).toContain('  Goal 2: Write comprehensive tests')
+      expect(context.content).toContain('Goal 1: Complete feature implementation')
+      expect(context.content).toContain('Goal 2: Write comprehensive tests')
       expect(context.content).toContain('# Timeline')
-      expect(context.content).toContain('  Week 1: Setup')
-      expect(context.content).toContain('    Install dependencies')
+      expect(context.content).toContain('Week 1: Setup')
+      expect(context.content).toContain('Install dependencies')
 
       // Contract: sourceUUIDs must include all blocks
       expect(context.sourceUUIDs).toHaveLength(6)
@@ -199,11 +200,12 @@ describe('Context Extraction Contract', () => {
       // Assert - Verify contract
       expect(context.type).toBe('block')
 
-      // Contract: content must preserve hierarchy
+      // Contract: content must include all blocks (no longer with indentation)
+      // Indentation removed to prevent LLM confusion
       expect(context.content).toContain('Parent: Project Tasks')
-      expect(context.content).toContain('  Task 1: Design')
-      expect(context.content).toContain('    Subtask: Create mockups')
-      expect(context.content).toContain('  Task 2: Implementation')
+      expect(context.content).toContain('Task 1: Design')
+      expect(context.content).toContain('Subtask: Create mockups')
+      expect(context.content).toContain('Task 2: Implementation')
 
       // Contract: all nested blocks must be included
       expect(context.sourceUUIDs).toEqual([

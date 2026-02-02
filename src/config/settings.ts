@@ -30,6 +30,12 @@ export interface PluginSettings {
 
   /** Refresh interval for custom commands (milliseconds) */
   customCommandRefreshInterval: number
+
+  /** Enable automatic formatting of LLM output */
+  enableFormatting: boolean
+
+  /** Log formatting modifications for debugging */
+  logFormattingModifications: boolean
 }
 
 /**
@@ -56,6 +62,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   streamingUpdateInterval: 50, // 50ms for smooth updates
   enableCustomCommands: true,
   customCommandRefreshInterval: 5000, // 5 seconds
+  enableFormatting: true, // Enable by default to fix formatting issues
+  logFormattingModifications: true, // Log by default for debugging
 }
 
 /**
@@ -183,6 +191,21 @@ export const SETTINGS_SCHEMA = [
     title: 'Custom Command Refresh Interval (ms)',
     description: 'Milliseconds between custom command refreshes',
     default: DEFAULT_SETTINGS.customCommandRefreshInterval,
+  },
+  {
+    key: 'enableFormatting',
+    type: 'boolean',
+    title: 'Enable Output Formatting',
+    description:
+      'Automatically format LLM output to prevent Logseq block structure issues (recommended)',
+    default: DEFAULT_SETTINGS.enableFormatting,
+  },
+  {
+    key: 'logFormattingModifications',
+    type: 'boolean',
+    title: 'Log Formatting Changes',
+    description: 'Log when formatting modifications are applied (useful for debugging)',
+    default: DEFAULT_SETTINGS.logFormattingModifications,
   },
 ]
 

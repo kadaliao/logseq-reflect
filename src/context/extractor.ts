@@ -165,10 +165,11 @@ function extractFromBlockTree(
       return
     }
 
-    // Add block content with indentation
-    const indent = '  '.repeat(depth)
+    // Add block content without visual indentation
+    // Visual indentation confuses LLM into replicating it in output
+    // Hierarchy is implicit from the block tree structure
     if (block.content && block.content.trim()) {
-      contentParts.push(`${indent}${block.content}`)
+      contentParts.push(block.content)
       uuids.push(block.uuid)
     }
 

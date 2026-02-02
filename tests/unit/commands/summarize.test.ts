@@ -67,6 +67,8 @@ describe('Summarization Handlers - Unit Tests', () => {
         retryDelayMs: 1000,
         maxContextTokens: 8000,
       },
+      enableFormatting: true,
+      logFormattingModifications: false,
       debugMode: false,
     }
 

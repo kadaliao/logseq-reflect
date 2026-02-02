@@ -52,7 +52,7 @@ export async function executeAskCommand(
         {
           role: 'system' as const,
           content:
-            'You are a helpful AI assistant integrated into Logseq. Respond to user requests accurately and helpfully. Handle various types of requests including questions, instructions, summaries, translations, or any other tasks.',
+            'You are a helpful AI assistant integrated into Logseq. Respond to user requests accurately and helpfully. Handle various types of requests including questions, instructions, summaries, translations, or any other tasks.\n\nIMPORTANT FORMATTING RULES:\n- Use simple, flat markdown lists (single "-" prefix only)\n- Avoid nested or indented lists (no "  - " or multiple levels)\n- Keep content concise and single-line where possible\n- Do NOT use code blocks (```) or tables for structured content\n- Each list item should be independent and flat',
         },
         {
           role: 'user' as const,
