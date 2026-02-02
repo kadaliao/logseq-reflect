@@ -323,10 +323,10 @@ pnpm format:check
 
 ## Contributing
 
-1. Read the [constitution](.specify/memory/constitution.md) for quality standards
-2. Check [tasks](specs/001-ai-plugin/tasks.md) for implementation roadmap
-3. Follow [test-driven development](specs/001-ai-plugin/plan.md) approach
-4. Ensure all tests pass and coverage ≥80%
+1. Follow test-driven development approach
+2. Ensure all tests pass (current: 433/433 passing, 100% pass rate)
+3. Run `pnpm test` before committing
+4. Follow TypeScript strict mode conventions
 
 ## License
 
@@ -334,6 +334,6 @@ MIT
 
 ## Support
 
+- **Issues & Bug Reports**: [GitHub Issues](https://github.com/kadaliao/logseq-reflect/issues)
 - **Logseq Plugin SDK**: https://github.com/logseq/logseq-plugin-sdk
 - **Plugin Samples**: https://github.com/logseq/logseq-plugin-samples
-- **Documentation**: See `specs/001-ai-plugin/` for detailed specs and plans
