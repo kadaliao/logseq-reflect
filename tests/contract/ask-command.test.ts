@@ -226,7 +226,9 @@ describe('Ask AI Command - Contract Tests', () => {
       // Arrange
       mockGetCurrentBlock.mockResolvedValue({ uuid: 'test-uuid', content: 'Test question' } as any)
       const apiError = new Error('API request failed: 500 Internal Server Error')
-      mockStream.mockRejectedValue(apiError)
+      mockStream.mockImplementation(async function* () {
+        throw apiError
+      })
 
       // Act
       await executeAskCommand(settings)

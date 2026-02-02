@@ -233,7 +233,9 @@ describe('Context Command Handlers', () => {
       })
 
       // Mock stream to throw error
-      mockStream.mockRejectedValueOnce(new Error('Network error'))
+      mockStream.mockImplementation(async function* () {
+        throw new Error('Network error')
+      })
 
       // Act
       await handleAskWithPageContext('Test question', mockSettings)

@@ -16,7 +16,7 @@ import {
 } from '../llm/response-handler'
 import { extractPageContext, extractBlockContext } from '../context/extractor'
 import { createLogger } from '../utils/logger'
-import { sanitizeForLogseq, formatSummaryList } from '../utils/formatter'
+import { sanitizeForLogseq, formatSummaryList, parseNestedList, type NestedListItem } from '../utils/formatter'
 
 const logger = createLogger('SummarizeCommands')
 
@@ -365,24 +365,24 @@ async function createSummaryBlocks(
     })
   }
 
-  // Parse the response to separate list items from other content
+  // Parse the response using the new nested list parser
+  // First, parse the nested structure
+  const nestedItems = parseNestedList(formattedResponse)
+
+  // Also extract non-list content
   const lines = formattedResponse.split('\n')
-  const listItems: string[] = []
   const nonListContent: string[] = []
 
   for (const line of lines) {
     const trimmed = line.trim()
-    if (trimmed.startsWith('- ')) {
-      // This is a list item
-      listItems.push(trimmed.substring(2).trim())
-    } else if (trimmed.length > 0) {
-      // This is regular content (paragraph, heading, etc.)
+    // Skip list items (they're handled by parseNestedList)
+    if (!trimmed.startsWith('- ') && !trimmed.match(/^\s*[-*+]\s/) && trimmed.length > 0) {
       nonListContent.push(trimmed)
     }
   }
 
   logger.debug('Parsed summary content:', {
-    listItems: listItems.length,
+    nestedItems: nestedItems.length,
     nonListLines: nonListContent.length,
   })
 
@@ -408,36 +408,30 @@ async function createSummaryBlocks(
     await logseq.Editor.updateBlock(headerBlockUUID, 'Summary')
   }
 
-  // Create child blocks for list items under the header block
-  if (listItems.length > 0) {
-    logger.info(`Creating ${listItems.length} summary blocks as children of ${headerBlockUUID}`)
+  // Create nested blocks for list items under the header block
+  if (nestedItems.length > 0) {
+    const totalItems = countTotalItems(nestedItems)
+    logger.info(`Creating ${totalItems} summary block(s) with hierarchy under ${headerBlockUUID}`)
 
-    for (let i = 0; i < listItems.length; i++) {
-      const item = listItems[i]
-      logger.debug(`Creating summary block ${i + 1}/${listItems.length}: "${item}"`)
+    await createNestedBlocks(headerBlockUUID, nestedItems, logger)
 
-      try {
-        const createdBlock = await logseq.Editor.insertBlock(
-          headerBlockUUID,
-          item,
-          { sibling: false } // Insert as child, not sibling
-        )
-
-        if (createdBlock) {
-          logger.debug(`Successfully created block with UUID: ${createdBlock.uuid}`)
-        } else {
-          logger.error(`Failed to create block for item: "${item}"`)
-        }
-      } catch (error) {
-        logger.error(`Error creating summary block: ${error}`, error as Error)
-      }
-    }
-
-    await logseq.App.showMsg(`✅ Created summary with ${listItems.length} point(s)`, 'success')
+    await logseq.App.showMsg(`✅ Created summary with ${totalItems} point(s)`, 'success')
   } else {
     // No list items, just show completion message
     await logseq.App.showMsg('✅ Summary completed', 'success')
   }
+}
+
+/**
+ * Count total number of items in nested structure
+ */
+function countTotalItems(items: NestedListItem[]): number {
+  let count = 0
+  for (const item of items) {
+    count += 1
+    count += countTotalItems(item.children)
+  }
+  return count
 }
 
 /**
@@ -454,4 +448,39 @@ async function getSettings(): Promise<PluginSettings> {
   }
 
   return settings
+}
+
+/**
+ * Recursively create nested blocks in Logseq
+ * @param parentUUID - Parent block UUID
+ * @param items - Nested list items to create
+ * @param logger - Logger instance for debugging
+ */
+async function createNestedBlocks(
+  parentUUID: string,
+  items: NestedListItem[],
+  logger: ReturnType<typeof createLogger>
+): Promise<void> {
+  for (const item of items) {
+    try {
+      const createdBlock = await logseq.Editor.insertBlock(
+        parentUUID,
+        item.content,
+        { sibling: false } // Insert as child
+      )
+
+      if (createdBlock) {
+        logger.debug(`Created block: "${item.content}" (level ${item.level})`)
+
+        // Recursively create children
+        if (item.children.length > 0) {
+          await createNestedBlocks(createdBlock.uuid, item.children, logger)
+        }
+      } else {
+        logger.error(`Failed to create block: "${item.content}"`)
+      }
+    } catch (error) {
+      logger.error(`Error creating block: ${error}`, error as Error)
+    }
+  }
 }

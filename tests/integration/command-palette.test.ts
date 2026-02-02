@@ -158,7 +158,9 @@ describe('Command Palette Integration Tests', () => {
 
     it('should handle errors during command execution', async () => {
       // Arrange
-      mockStream.mockRejectedValue(new Error('API Error'))
+      mockStream.mockImplementation(async function* () {
+        throw new Error('API Error')
+      })
       await import('../../src/index')
 
       const commandHandler = mockRegisterCommandPalette.mock.calls[0][1]

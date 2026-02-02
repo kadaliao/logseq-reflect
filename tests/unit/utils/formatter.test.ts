@@ -9,6 +9,7 @@ import {
   sanitizeForLogseq,
   validateBlockHierarchy,
   normalizeLogseqTags,
+  parseNestedList,
 } from '../../../src/utils/formatter'
 
 describe('Formatter Utilities', () => {
@@ -83,6 +84,91 @@ Another paragraph`
 - Item 2`
 
       expect(flattenNestedLists(input)).toBe(expected)
+    })
+  })
+
+  describe('parseNestedList', () => {
+    it('should parse flat list correctly', () => {
+      const input = `- Item 1
+- Item 2
+- Item 3`
+
+      const result = parseNestedList(input)
+
+      expect(result.length).toBe(3)
+      expect(result[0].content).toBe('Item 1')
+      expect(result[0].level).toBe(0)
+      expect(result[0].children.length).toBe(0)
+    })
+
+    it('should parse single-level nested list', () => {
+      const input = `- Parent 1
+  - Child 1
+  - Child 2
+- Parent 2`
+
+      const result = parseNestedList(input)
+
+      expect(result.length).toBe(2)
+      expect(result[0].content).toBe('Parent 1')
+      expect(result[0].children.length).toBe(2)
+      expect(result[0].children[0].content).toBe('Child 1')
+      expect(result[0].children[1].content).toBe('Child 2')
+      expect(result[1].content).toBe('Parent 2')
+    })
+
+    it('should parse multi-level nested list', () => {
+      const input = `- Level 1
+  - Level 2
+    - Level 3
+      - Level 4`
+
+      const result = parseNestedList(input)
+
+      expect(result.length).toBe(1)
+      expect(result[0].content).toBe('Level 1')
+      expect(result[0].children.length).toBe(1)
+      expect(result[0].children[0].content).toBe('Level 2')
+      expect(result[0].children[0].children.length).toBe(1)
+      expect(result[0].children[0].children[0].content).toBe('Level 3')
+      expect(result[0].children[0].children[0].children.length).toBe(1)
+      expect(result[0].children[0].children[0].children[0].content).toBe('Level 4')
+    })
+
+    it('should parse complex nested structure', () => {
+      const input = `- Main point 1
+  - Detail A
+  - Detail B
+    - Sub-detail B1
+- Main point 2
+  - Detail C`
+
+      const result = parseNestedList(input)
+
+      expect(result.length).toBe(2)
+      expect(result[0].content).toBe('Main point 1')
+      expect(result[0].children.length).toBe(2)
+      expect(result[0].children[1].content).toBe('Detail B')
+      expect(result[0].children[1].children.length).toBe(1)
+      expect(result[0].children[1].children[0].content).toBe('Sub-detail B1')
+      expect(result[1].content).toBe('Main point 2')
+      expect(result[1].children.length).toBe(1)
+    })
+
+    it('should handle mixed content with non-list lines', () => {
+      const input = `Some text
+- Item 1
+  - Child 1
+More text
+- Item 2`
+
+      const result = parseNestedList(input)
+
+      // Should only parse list items, ignoring non-list text
+      expect(result.length).toBe(2)
+      expect(result[0].content).toBe('Item 1')
+      expect(result[0].children.length).toBe(1)
+      expect(result[1].content).toBe('Item 2')
     })
   })
 

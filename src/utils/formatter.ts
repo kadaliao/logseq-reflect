@@ -39,6 +39,15 @@ export interface FlashcardBlock {
   hasCard: boolean
 }
 
+/**
+ * Nested list item with hierarchy information
+ */
+export interface NestedListItem {
+  content: string
+  level: number
+  children: NestedListItem[]
+}
+
 // Default configuration
 const DEFAULT_OPTIONS: FormatterOptions = {
   enableFormatting: true,
@@ -92,11 +101,13 @@ export function sanitizeForLogseq(
       sanitized = normalized
     }
 
-    // Step 3: Flatten nested lists
-    const flattened = flattenNestedLists(sanitized)
-    if (flattened !== sanitized) {
-      modifications.push('Flattened nested lists')
-      sanitized = flattened
+    // Step 3: Flatten nested lists (skip for summarize - it handles nesting)
+    if (opts.commandType !== 'summarize') {
+      const flattened = flattenNestedLists(sanitized)
+      if (flattened !== sanitized) {
+        modifications.push('Flattened nested lists')
+        sanitized = flattened
+      }
     }
 
     // Step 4: Normalize Logseq tags (ensure proper spacing and format)
@@ -158,6 +169,51 @@ export function flattenNestedLists(content: string): string {
   }
 
   return flattened.join('\n')
+}
+
+/**
+ * Parse nested list structure while preserving hierarchy
+ * Converts markdown indented lists into a tree structure
+ *
+ * @param content - Content with potentially nested lists
+ * @returns Array of top-level list items with nested children
+ */
+export function parseNestedList(content: string): NestedListItem[] {
+  const lines = content.split('\n')
+  const root: NestedListItem[] = []
+  const stack: { item: NestedListItem; level: number }[] = []
+
+  for (const line of lines) {
+    // Match list items with indentation
+    const match = line.match(/^(\s*)[-*+]\s+(.+)$/)
+    if (!match) continue
+
+    const [, spaces, text] = match
+    const level = Math.floor(spaces.length / 2) // 2 spaces = 1 level
+
+    const item: NestedListItem = {
+      content: text.trim(),
+      level,
+      children: [],
+    }
+
+    // Find the correct parent based on indentation level
+    while (stack.length > 0 && stack[stack.length - 1].level >= level) {
+      stack.pop()
+    }
+
+    if (stack.length === 0) {
+      // Top-level item
+      root.push(item)
+    } else {
+      // Child item
+      stack[stack.length - 1].item.children.push(item)
+    }
+
+    stack.push({ item, level })
+  }
+
+  return root
 }
 
 /**

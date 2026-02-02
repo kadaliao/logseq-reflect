@@ -292,7 +292,9 @@ describe('Flashcard Generation Integration', () => {
       mockInsertBlock.mockResolvedValue({ uuid: 'placeholder-uuid' } as any)
 
       // Mock API failure
-      mockStream.mockRejectedValueOnce(new Error('API error'))
+      mockStream.mockImplementation(async function* () {
+        throw new Error('API error')
+      })
 
       // Act
       const { handleGenerateFlashcard } = await import('../../src/commands/flashcard')

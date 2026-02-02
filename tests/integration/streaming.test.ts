@@ -380,7 +380,9 @@ describe('Streaming Summarization Integration', () => {
       })
 
       // Mock LLM request failure
-      mockStream.mockRejectedValueOnce(new Error('Connection timeout'))
+      mockStream.mockImplementation(async function* () {
+        throw new Error('Connection timeout')
+      })
 
       // Act
       const { handleSummarizePage } = await import('../../src/commands/summarize')
