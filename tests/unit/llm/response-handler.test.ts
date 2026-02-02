@@ -142,6 +142,7 @@ describe('ResponseHandler - Unit Tests', () => {
 
     beforeEach(async () => {
       const result = await createResponseHandler('parent-uuid')
+      handler = result.handler
     })
 
     it('should accumulate content from chunk', async () => {
@@ -179,6 +180,9 @@ describe('ResponseHandler - Unit Tests', () => {
 
       // Act
       await updateWithChunk(handler, chunk)
+
+      // Wait for debounced update (50ms + buffer)
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       // Assert
       expect(mockUpdateBlock).toHaveBeenCalledWith('test-block-uuid', 'Test content')
@@ -283,6 +287,7 @@ describe('ResponseHandler - Unit Tests', () => {
 
     beforeEach(async () => {
       const result = await createResponseHandler('parent-uuid')
+      handler = result.handler
       handler.accumulatedContent = 'Final response'
     })
 
@@ -356,6 +361,7 @@ describe('ResponseHandler - Unit Tests', () => {
 
     beforeEach(async () => {
       const result = await createResponseHandler('parent-uuid')
+      handler = result.handler
       handler.accumulatedContent = 'Partial content'
     })
 
@@ -444,6 +450,7 @@ describe('ResponseHandler - Unit Tests', () => {
 
     beforeEach(async () => {
       const result = await createResponseHandler('parent-uuid')
+      handler = result.handler
       handler.accumulatedContent = 'Some content'
     })
 

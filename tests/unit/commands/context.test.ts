@@ -6,6 +6,20 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { PluginSettings } from '../../../src/config/settings'
 
+// Mock LLM client
+vi.mock('../../../src/llm/client', () => ({
+  LLMClient: vi.fn().mockImplementation(() => ({
+    stream: vi.fn(),
+    chat: vi.fn(),
+  })),
+}))
+
+// Import after mocking
+const { handleAskWithPageContext, handleAskWithBlockContext } = await import(
+  '../../../src/commands/context'
+)
+const { LLMClient } = await import('../../../src/llm/client')
+
 // Get mock references
 const mockGetCurrentPage = vi.mocked(logseq.Editor.getCurrentPage)
 const mockGetCurrentBlock = vi.mocked(logseq.Editor.getCurrentBlock)
@@ -15,6 +29,10 @@ const mockGetBlock = vi.mocked(logseq.Editor.getBlock)
 const mockInsertBlock = vi.mocked(logseq.Editor.insertBlock)
 const mockUpdateBlock = vi.mocked(logseq.Editor.updateBlock)
 const mockShowMsg = vi.mocked(logseq.App.showMsg)
+const MockedLLMClient = vi.mocked(LLMClient)
+
+let mockStream: any
+let mockChat: any
 
 // Mock settings
 const mockSettings: PluginSettings = {
@@ -31,11 +49,32 @@ const mockSettings: PluginSettings = {
     retryCount: 3,
     maxContextTokens: 8000,
   },
+  debugMode: false,
+  defaultContextStrategy: 'none',
+  enableStreaming: true,
+  streamingUpdateInterval: 50,
+  enableCustomCommands: false,
+  customCommandRefreshInterval: 5000,
+  enableFormatting: true,
+  logFormattingModifications: false,
 }
 
 describe('Context Command Handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+
+    // Fresh mock instances for each test
+    mockStream = vi.fn()
+    mockChat = vi.fn()
+
+    MockedLLMClient.mockImplementation(() => ({
+      stream: mockStream,
+      chat: mockChat,
+    }))
+
+    // Setup default mock behaviors
+    mockInsertBlock.mockResolvedValue({ uuid: 'placeholder-uuid' } as any)
+    mockUpdateBlock.mockResolvedValue(null as any)
   })
 
   describe('handleAskWithPageContext', () => {
@@ -74,30 +113,12 @@ describe('Context Command Handlers', () => {
         content: 'Loading...',
       })
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
-        ok: true,
-        body: {
-          getReader: () => ({
-            read: vi
-              .fn()
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(
-                  'data: {"choices":[{"delta":{"content":"Test response"}}]}\n\n'
-                ),
-              })
-              .mockResolvedValueOnce({
-                done: true,
-                value: undefined,
-              }),
-          }),
-        },
+      // Mock stream response
+      mockStream.mockImplementation(async function* () {
+        yield { choices: [{ delta: { content: 'Test response' } }] }
       })
 
       // Act
-      const { handleAskWithPageContext } = await import(
-        '../../../src/commands/context'
-      )
       await handleAskWithPageContext('What is on this page?', mockSettings)
 
       // Assert
@@ -106,13 +127,12 @@ describe('Context Command Handlers', () => {
       expect(mockGetPageBlocksTree).toHaveBeenCalledWith('Test Page')
 
       // Verify LLM was called with page context
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('Page content line 1'),
-        })
-      )
+      expect(mockStream).toHaveBeenCalled()
+      const streamCall = mockStream.mock.calls[0]
+      const request = streamCall[0]
+      expect(request.messages.some((m: any) =>
+        m.content && m.content.includes('Page content line 1')
+      )).toBe(true)
     })
 
     it('should handle empty page gracefully', async () => {
@@ -139,34 +159,16 @@ describe('Context Command Handlers', () => {
         content: 'Loading...',
       })
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
-        ok: true,
-        body: {
-          getReader: () => ({
-            read: vi
-              .fn()
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(
-                  'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n'
-                ),
-              })
-              .mockResolvedValueOnce({
-                done: true,
-                value: undefined,
-              }),
-          }),
-        },
+      // Mock stream response
+      mockStream.mockImplementation(async function* () {
+        yield { choices: [{ delta: { content: 'Response' } }] }
       })
 
       // Act
-      const { handleAskWithPageContext } = await import(
-        '../../../src/commands/context'
-      )
       await handleAskWithPageContext('Test question', mockSettings)
 
       // Assert - Should still work without context
-      expect(global.fetch).toHaveBeenCalled()
+      expect(mockStream).toHaveBeenCalled()
     })
 
     it('should show warning when no active page', async () => {
@@ -185,7 +187,7 @@ describe('Context Command Handlers', () => {
         'warning'
       )
 
-      expect(global.fetch).not.toHaveBeenCalled()
+      expect(mockStream).not.toHaveBeenCalled()
     })
 
     it('should return early if question is empty', async () => {
@@ -197,7 +199,7 @@ describe('Context Command Handlers', () => {
 
       // Assert
       expect(mockGetCurrentPage).not.toHaveBeenCalled()
-      expect(global.fetch).not.toHaveBeenCalled()
+      expect(mockStream).not.toHaveBeenCalled()
     })
 
     it('should handle LLM errors gracefully', async () => {
@@ -230,12 +232,10 @@ describe('Context Command Handlers', () => {
         content: 'Loading...',
       })
 
-      global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'))
+      // Mock stream to throw error
+      mockStream.mockRejectedValueOnce(new Error('Network error'))
 
       // Act
-      const { handleAskWithPageContext } = await import(
-        '../../../src/commands/context'
-      )
       await handleAskWithPageContext('Test question', mockSettings)
 
       // Assert
@@ -281,30 +281,12 @@ describe('Context Command Handlers', () => {
         content: 'Loading...',
       })
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
-        ok: true,
-        body: {
-          getReader: () => ({
-            read: vi
-              .fn()
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(
-                  'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n'
-                ),
-              })
-              .mockResolvedValueOnce({
-                done: true,
-                value: undefined,
-              }),
-          }),
-        },
+      // Mock stream response
+      mockStream.mockImplementation(async function* () {
+        yield { choices: [{ delta: { content: 'Response' } }] }
       })
 
       // Act
-      const { handleAskWithBlockContext } = await import(
-        '../../../src/commands/context'
-      )
       await handleAskWithBlockContext('Explain this', mockSettings)
 
       // Assert
@@ -314,10 +296,18 @@ describe('Context Command Handlers', () => {
       })
 
       // Verify LLM was called with block context
-      const fetchCall = (global.fetch as any).mock.calls[0]
-      expect(fetchCall[1].body).toContain('Parent block')
-      expect(fetchCall[1].body).toContain('Child 1')
-      expect(fetchCall[1].body).toContain('Child 2')
+      expect(mockStream).toHaveBeenCalled()
+      const streamCall = mockStream.mock.calls[0]
+      const request = streamCall[0]
+      expect(request.messages.some((m: any) =>
+        m.content && m.content.includes('Parent block')
+      )).toBe(true)
+      expect(request.messages.some((m: any) =>
+        m.content && m.content.includes('Child 1')
+      )).toBe(true)
+      expect(request.messages.some((m: any) =>
+        m.content && m.content.includes('Child 2')
+      )).toBe(true)
     })
 
     it('should handle standalone block without children', async () => {
@@ -338,35 +328,17 @@ describe('Context Command Handlers', () => {
         content: 'Loading...',
       })
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
-        ok: true,
-        body: {
-          getReader: () => ({
-            read: vi
-              .fn()
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(
-                  'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n'
-                ),
-              })
-              .mockResolvedValueOnce({
-                done: true,
-                value: undefined,
-              }),
-          }),
-        },
+      // Mock stream response
+      mockStream.mockImplementation(async function* () {
+        yield { choices: [{ delta: { content: 'Response' } }] }
       })
 
       // Act
-      const { handleAskWithBlockContext } = await import(
-        '../../../src/commands/context'
-      )
       await handleAskWithBlockContext('What is this?', mockSettings)
 
       // Assert
       expect(mockGetBlock).toHaveBeenCalled()
-      expect(global.fetch).toHaveBeenCalled()
+      expect(mockStream).toHaveBeenCalled()
     })
 
     it('should show warning when no active block', async () => {
@@ -385,7 +357,7 @@ describe('Context Command Handlers', () => {
         'warning'
       )
 
-      expect(global.fetch).not.toHaveBeenCalled()
+      expect(mockStream).not.toHaveBeenCalled()
     })
 
     it('should return early if question is empty', async () => {
@@ -403,7 +375,7 @@ describe('Context Command Handlers', () => {
 
       // Assert
       // Note: getCurrentBlock might be called for the empty check, but no further processing should happen
-      expect(global.fetch).not.toHaveBeenCalled()
+      expect(mockStream).not.toHaveBeenCalled()
     })
 
     it('should handle errors gracefully', async () => {
@@ -473,23 +445,18 @@ describe('Context Command Handlers', () => {
         content: 'Loading...',
       })
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          choices: [
-            {
-              message: {
-                content: 'Complete response',
-              },
+      // Mock chat response for non-streaming
+      mockChat.mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: 'Complete response',
             },
-          ],
-        }),
+          },
+        ],
       })
 
       // Act
-      const { handleAskWithPageContext } = await import(
-        '../../../src/commands/context'
-      )
       await handleAskWithPageContext('Test', nonStreamingSettings)
 
       // Assert
@@ -525,23 +492,25 @@ describe('Context Command Handlers', () => {
         content: 'Loading...',
       })
 
-      global.fetch = vi.fn().mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          choices: [
-            {
-              message: {
-                content: 'Complete response',
-              },
+      // Need to mock getBlock for parent block lookup
+      mockGetBlock.mockResolvedValueOnce({
+        uuid: 'parent-uuid',
+        content: 'Parent content',
+        children: [],
+      })
+
+      // Mock chat response for non-streaming
+      mockChat.mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              content: 'Complete response',
             },
-          ],
-        }),
+          },
+        ],
       })
 
       // Act
-      const { handleAskWithBlockContext } = await import(
-        '../../../src/commands/context'
-      )
       await handleAskWithBlockContext('Test', nonStreamingSettings)
 
       // Assert

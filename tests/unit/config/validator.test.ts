@@ -27,7 +27,7 @@ describe('Property Validation (T102)', () => {
 
       for (const model of invalidModels) {
         const isValid = model && typeof model === 'string' && model.trim().length > 0
-        expect(isValid).toBe(false)
+        expect(isValid).toBeFalsy()
       }
     })
   })

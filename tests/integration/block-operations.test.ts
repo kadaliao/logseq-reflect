@@ -149,22 +149,14 @@ describe('Block Creation and Update Integration Tests', () => {
         await updateWithChunk(handler, chunk)
       }
 
-      // Assert - verify progressive updates
-      expect(mockUpdateBlock).toHaveBeenNthCalledWith(
-        1,
-        'new-block-uuid',
-        'First '
-      )
-      expect(mockUpdateBlock).toHaveBeenNthCalledWith(
-        2,
-        'new-block-uuid',
-        'First second '
-      )
-      expect(mockUpdateBlock).toHaveBeenNthCalledWith(
-        3,
-        'new-block-uuid',
-        'First second third'
-      )
+      // Wait for debounced updates to complete
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // Assert - At least one update should have occurred with accumulated content
+      expect(mockUpdateBlock).toHaveBeenCalled()
+      const lastCall = mockUpdateBlock.mock.calls[mockUpdateBlock.mock.calls.length - 1]
+      expect(lastCall[0]).toBe('new-block-uuid')
+      expect(lastCall[1]).toBe('First second third')
     })
 
     it('should handle empty deltas gracefully', async () => {
@@ -380,6 +372,9 @@ describe('Block Creation and Update Integration Tests', () => {
       // Act
       await updateWithChunk(handler, chunk)
 
+      // Wait for debounced update
+      await new Promise(resolve => setTimeout(resolve, 100))
+
       // Assert
       expect(handler.accumulatedContent.length).toBe(15000)
       expect(mockUpdateBlock).toHaveBeenCalledWith('new-block-uuid', longContent)
@@ -395,6 +390,9 @@ describe('Block Creation and Update Integration Tests', () => {
 
       // Act
       await updateWithChunk(handler, chunk)
+
+      // Wait for debounced update
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       // Assert
       expect(handler.accumulatedContent).toBe(specialContent)
@@ -426,8 +424,11 @@ describe('Block Creation and Update Integration Tests', () => {
         await updateWithChunk(handler, chunk)
       }
 
-      // Assert
-      expect(mockUpdateBlock).toHaveBeenCalledTimes(100)
+      // Wait for debounced updates
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // Assert - Debouncing will batch these, so not all 100 will result in individual calls
+      expect(mockUpdateBlock).toHaveBeenCalled()
       expect(handler.accumulatedContent).toContain('0 ')
       expect(handler.accumulatedContent).toContain('99 ')
     })

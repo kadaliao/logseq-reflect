@@ -17,6 +17,7 @@ globalThis.logseq = {
     insertBlock: vi.fn(),
     updateBlock: vi.fn(),
     appendBlockInPage: vi.fn(),
+    removeBlock: vi.fn(),
     getBlock: vi.fn(),
     getPage: vi.fn(),
     getPageBlocksTree: vi.fn(),

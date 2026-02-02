@@ -4,12 +4,10 @@
  */
 
 import { describe, it, expect } from 'vitest'
+import { TASK_BREAKDOWN_SYSTEM_PROMPT } from '../../src/commands/tasks'
 
 describe('Task Breakdown - Contract Tests', () => {
   it('should have system prompt that instructs task breakdown', () => {
-    // Import the constant (will be defined in implementation)
-    const { TASK_BREAKDOWN_SYSTEM_PROMPT } = require('../../src/commands/tasks')
-
     expect(TASK_BREAKDOWN_SYSTEM_PROMPT).toBeDefined()
     expect(TASK_BREAKDOWN_SYSTEM_PROMPT).toContain('subtask')
     expect(TASK_BREAKDOWN_SYSTEM_PROMPT).toContain('TODO')
@@ -25,8 +23,6 @@ describe('Task Breakdown - Contract Tests', () => {
   })
 
   it('should request subtasks in specific format', () => {
-    const { TASK_BREAKDOWN_SYSTEM_PROMPT } = require('../../src/commands/tasks')
-
     // Verify format instructions in prompt
     expect(TASK_BREAKDOWN_SYSTEM_PROMPT).toMatch(/TODO|DOING|DONE/)
     expect(TASK_BREAKDOWN_SYSTEM_PROMPT).toContain('-')
@@ -42,7 +38,7 @@ describe('Task Breakdown - Contract Tests', () => {
 
   it('should handle non-TODO blocks with warning', async () => {
     // Non-TODO content should be detected
-    const nonTodoContent = 'This is a regular note without TODO marker'
+    const nonTodoContent = 'This is a regular note without task marker'
 
     expect(nonTodoContent).not.toContain('TODO')
     // Implementation should validate and show warning

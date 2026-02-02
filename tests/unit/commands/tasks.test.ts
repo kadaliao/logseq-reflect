@@ -52,19 +52,26 @@ describe('Task Breakdown Handler - Unit Tests', () => {
     // Default settings
     settings = {
       llm: {
-        apiEndpoint: 'https://api.openai.com/v1',
-        apiKey: 'test-key',
+        baseURL: 'http://localhost:11434',
+        apiPath: '/v1/chat/completions',
         modelName: 'gpt-4',
+        apiKey: 'test-key',
         temperature: 0.7,
         topP: 1.0,
         maxTokens: 2000,
         streamingEnabled: true,
-        timeoutMs: 30000,
-        retryAttempts: 3,
-        retryDelayMs: 1000,
+        timeoutSeconds: 30,
+        retryCount: 3,
         maxContextTokens: 8000,
       },
       debugMode: false,
+      defaultContextStrategy: 'none',
+      enableStreaming: true,
+      streamingUpdateInterval: 50,
+      enableCustomCommands: false,
+      customCommandRefreshInterval: 5000,
+      enableFormatting: true,
+      logFormattingModifications: false,
     }
 
     // Default mock behaviors

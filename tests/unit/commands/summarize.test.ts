@@ -93,6 +93,11 @@ describe('Summarization Handlers - Unit Tests', () => {
         originalName: 'Test Page',
       } as any)
 
+      mockGetCurrentBlock.mockResolvedValueOnce({
+        uuid: 'current-block',
+        content: '',
+      } as any)
+
       mockGetPageBlocksTree.mockResolvedValueOnce([
         {
           uuid: 'block-1',
@@ -121,7 +126,7 @@ describe('Summarization Handlers - Unit Tests', () => {
           messages: expect.arrayContaining([
             expect.objectContaining({
               role: 'system',
-              content: expect.stringContaining('summarize'),
+              content: expect.stringContaining('summar'), // matches "summary" or "summarize"
             }),
             expect.objectContaining({
               role: 'user',
@@ -191,6 +196,11 @@ describe('Summarization Handlers - Unit Tests', () => {
         originalName: 'Test Page',
       } as any)
 
+      mockGetCurrentBlock.mockResolvedValueOnce({
+        uuid: 'current-block',
+        content: '',
+      } as any)
+
       mockGetPageBlocksTree.mockResolvedValueOnce([
         {
           uuid: 'block-1',
@@ -208,8 +218,9 @@ describe('Summarization Handlers - Unit Tests', () => {
 
       // Assert
       expect(mockChat).toHaveBeenCalled()
+      // When current block is empty, it uses the current block directly
       expect(mockUpdateBlock).toHaveBeenCalledWith(
-        'placeholder-uuid',
+        'current-block',
         'Complete summary of the page.'
       )
     })
@@ -255,7 +266,7 @@ describe('Summarization Handlers - Unit Tests', () => {
           messages: expect.arrayContaining([
             expect.objectContaining({
               role: 'system',
-              content: expect.stringContaining('summarize'),
+              content: expect.stringContaining('summar'), // matches "summary" or "summarize"
             }),
             expect.objectContaining({
               role: 'user',
@@ -390,6 +401,11 @@ describe('Summarization Handlers - Unit Tests', () => {
         uuid: 'page-uuid',
         name: 'Test Page',
         originalName: 'Test Page',
+      } as any)
+
+      mockGetCurrentBlock.mockResolvedValueOnce({
+        uuid: 'current-block',
+        content: '',
       } as any)
 
       mockGetPageBlocksTree.mockResolvedValueOnce([
