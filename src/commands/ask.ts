@@ -12,6 +12,7 @@ import {
   markFailed,
 } from '../llm/response-handler'
 import { createLogger } from '../utils/logger'
+import { sanitizeForLogseq } from '../utils/formatter'
 
 const logger = createLogger('AskCommand')
 
@@ -75,6 +76,15 @@ export async function executeAskCommand(
           await updateWithChunk(handler, chunk)
         }
 
+        // Apply formatting before final update
+        if (settings.enableFormatting && handler.accumulatedContent) {
+          handler.accumulatedContent = sanitizeForLogseq(handler.accumulatedContent, {
+            enableFormatting: true,
+            logModifications: settings.logFormattingModifications,
+            commandType: 'ask',
+          })
+        }
+
         await markCompleted(handler)
       } catch (error) {
         await markFailed(handler, error as Error)
@@ -88,8 +98,18 @@ export async function executeAskCommand(
         const response = await client.chat(request)
         const content = response.choices[0]?.message.content || ''
 
-        handler.accumulatedContent = content
-        await logseq.Editor.updateBlock(handler.placeholderUUID, content)
+        // Apply formatting before updating block
+        let finalContent = content
+        if (settings.enableFormatting && content) {
+          finalContent = sanitizeForLogseq(content, {
+            enableFormatting: true,
+            logModifications: settings.logFormattingModifications,
+            commandType: 'ask',
+          })
+        }
+
+        handler.accumulatedContent = finalContent
+        await logseq.Editor.updateBlock(handler.placeholderUUID, finalContent)
 
         await markCompleted(handler)
       } catch (error) {
